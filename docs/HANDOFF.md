@@ -33,7 +33,7 @@ A local, non-versioned 135-sequence cryptic reference alignment and IQ-TREE 3 in
 
 ## Automatic-panel stress test
 
-The original cryptic reference panel contained a user-curated classical control. A derived local `cryptic_strict` package was created by pruning that tip without modifying the original data. The remaining six user-curated classical controls were not present in this source alignment and require their exact source panel or identifiers before they can be excluded.
+The production local reference pair is a separate classical package and the derived `cryptic_strict` package. No further record-level curation is planned for this workflow because the selected classical and cryptic panels are already non-overlapping.
 
 The local stress test at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\auto_panel_strict_stress_test_20260731` confirmed two known cryptic queries as `CRYPTIC` and one known clade-4 classical control as `CLASSICAL` against the strict package.
 
