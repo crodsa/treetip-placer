@@ -35,6 +35,20 @@ treetip place-auto \
 
 The result is deliberately conservative. `panel_assignment.tsv` contains one `CLASSICAL`, `CRYPTIC`, `AMBIGUOUS`, or `UNRESOLVED` call per query. A call is made only when its nearest-reference distance is better than the other panel by `--min-panel-distance-separation` (default `0.005`). This is a provisional threshold and must be calibrated with known classical, cryptic, and boundary samples for the exact pair of reference panels. `selected_trees/` contains one directly drawable Newick tree per selected panel; `panels/` retains both complete, auditable placement runs.
 
+Calibrate the paired-panel distance gate with internal leave-one-unique-sequence-out controls:
+
+```bash
+treetip calibrate-panel-gate \
+  --classical-reference-alignment classical_aligned.fasta \
+  --cryptic-reference-alignment cryptic_aligned.fasta \
+  --mafft /path/to/mafft \
+  --max-controls-per-panel 50 \
+  --output gate_calibration \
+  --verbose
+```
+
+This writes `calibration_records.tsv` and `calibration_summary.json`, including a fixed threshold sweep. It evaluates the panel-assignment gate only; it does not estimate external generalization, tree-placement accuracy, or phylogenetic support.
+
 ## Quick start
 
 ```bash

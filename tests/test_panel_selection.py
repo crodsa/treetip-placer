@@ -5,6 +5,8 @@ from __future__ import annotations
 import unittest
 
 from treetip_placer.models import PlacementResult, QueryQc
+from treetip_placer.cli import calibration_queries, panel_threshold_sweep, select_unique_sequence_controls
+from treetip_placer.models import AlignedSequence
 from treetip_placer.panel_selection import choose_reference_panel
 
 
@@ -60,6 +62,32 @@ class PanelSelectionTests(unittest.TestCase):
         self.assertEqual(decision.assignment, "UNRESOLVED")
         self.assertEqual(decision.decision_status, "FAIL")
         self.assertIn("NO_PANEL_PASSED_QC", decision.findings)
+
+    def test_unique_control_selection_excludes_duplicate_sequences(self) -> None:
+        controls = select_unique_sequence_controls(
+            (
+                AlignedSequence("B", tuple("AAAA")),
+                AlignedSequence("A", tuple("AAAA")),
+                AlignedSequence("C", tuple("AAAT")),
+            ),
+            10,
+        )
+
+        self.assertEqual([control.sample_id for control in controls], ["A", "C"])
+        self.assertEqual(
+            [control.sample_id for control in calibration_queries("classical", controls)],
+            ["classical::A", "classical::C"],
+        )
+
+    def test_threshold_sweep_includes_requested_default(self) -> None:
+        rows = panel_threshold_sweep(
+            [result("query", 0.01)],
+            [result("query", 0.10)],
+            {"query": "CLASSICAL"},
+            0.006,
+        )
+
+        self.assertTrue(any(row["threshold"] == 0.006 for row in rows))
 
 
 if __name__ == "__main__":

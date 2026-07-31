@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -25,6 +26,7 @@ from .models import AlignedSequence, PlacementConfig, PlacementResult, RunMetada
 from .outputs import render_placed_tree, write_run_outputs
 from .panel_selection import choose_reference_panel, write_panel_selection_outputs
 from .placement import place_query
+from .sequence import evaluate_sequence_qc
 from .tree import Tree
 
 
@@ -131,6 +133,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     auto.add_argument("--output", required=True, help="New, empty output directory.")
     add_placement_controls(auto)
+
+    calibrate = subparsers.add_parser(
+        "calibrate-panel-gate",
+        help="Calibrate classical/cryptic distance-gate behavior with internal leave-one-out controls.",
+    )
+    calibrate.add_argument(
+        "--classical-reference-alignment", required=True, help="Classical reference fixed-column FASTA alignment."
+    )
+    calibrate.add_argument(
+        "--cryptic-reference-alignment", required=True, help="Cryptic reference fixed-column FASTA alignment."
+    )
+    calibrate.add_argument("--mafft", required=True, help="MAFFT executable or wrapper for cross-panel mapping.")
+    calibrate.add_argument("--mafft-threads", type=positive_integer, default=1, help="MAFFT threads per mapping.")
+    calibrate.add_argument(
+        "--max-controls-per-panel",
+        type=positive_integer,
+        default=50,
+        help="Maximum unique-sequence controls selected deterministically from each panel.",
+    )
+    calibrate.add_argument(
+        "--min-panel-distance-separation",
+        type=nonnegative_float,
+        default=0.005,
+        help="Distance margin evaluated as the default decision threshold.",
+    )
+    calibrate.add_argument("--output", required=True, help="New, empty output directory.")
+    calibrate.add_argument("--min-coverage", type=probability, default=0.70)
+    calibrate.add_argument("--warn-coverage", type=probability, default=0.90)
+    calibrate.add_argument("--min-comparable-sites", type=positive_integer, default=100)
+    calibrate.add_argument("--outlier-distance", type=probability, default=0.50)
+    calibrate.add_argument(
+        "-v", "--verbose", action="count", default=0, help="Increase stderr progress detail; repeat for more detail."
+    )
     return parser
 
 
@@ -192,6 +227,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_place(arguments)
         if arguments.command == "place-auto":
             return run_auto_place(arguments)
+        if arguments.command == "calibrate-panel-gate":
+            return run_calibrate_panel_gate(arguments)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
@@ -388,6 +425,241 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     logger.event(1, "complete", "Automatic panel placement completed", **selection_summary)
     append_final_event(output, logger.events[-1])
     return 0
+
+
+def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
+    """Calibrate panel assignment on internal controls without topology placement."""
+
+    logger = EventLogger(arguments.verbose)
+    logger.event(1, "start", "Starting internal classical/cryptic panel-gate calibration", version=__version__)
+    output = prepare_output_directory(arguments.output)
+    mapping_directory = output / "mapping"
+    mapping_directory.mkdir()
+    classical_alignment = read_fasta_alignment(arguments.classical_reference_alignment)
+    cryptic_alignment = read_fasta_alignment(arguments.cryptic_reference_alignment)
+    classical_controls = select_unique_sequence_controls(
+        classical_alignment.sequences, arguments.max_controls_per_panel
+    )
+    cryptic_controls = select_unique_sequence_controls(
+        cryptic_alignment.sequences, arguments.max_controls_per_panel
+    )
+    logger.event(
+        1,
+        "input",
+        "Selected unique-sequence internal controls",
+        classical_controls=len(classical_controls),
+        cryptic_controls=len(cryptic_controls),
+    )
+
+    classical_queries = calibration_queries("classical", classical_controls)
+    cryptic_queries = calibration_queries("cryptic", cryptic_controls)
+    classical_raw = mapping_directory / "classical_controls.ungapped.fasta"
+    cryptic_raw = mapping_directory / "cryptic_controls.ungapped.fasta"
+    write_fasta_records(classical_raw, ungapped_fasta_records(classical_queries))
+    write_fasta_records(cryptic_raw, ungapped_fasta_records(cryptic_queries))
+    classical_to_cryptic = map_queries_to_panel(
+        panel_name="classical_controls_to_cryptic",
+        mafft=arguments.mafft,
+        mafft_threads=arguments.mafft_threads,
+        query_fasta=str(classical_raw),
+        query_ids=tuple(query.sample_id for query in classical_queries),
+        reference_alignment=arguments.cryptic_reference_alignment,
+        mapping_directory=mapping_directory,
+        logger=logger,
+    )
+    cryptic_to_classical = map_queries_to_panel(
+        panel_name="cryptic_controls_to_classical",
+        mafft=arguments.mafft,
+        mafft_threads=arguments.mafft_threads,
+        query_fasta=str(cryptic_raw),
+        query_ids=tuple(query.sample_id for query in cryptic_queries),
+        reference_alignment=arguments.classical_reference_alignment,
+        mapping_directory=mapping_directory,
+        logger=logger,
+    )
+    cross_to_cryptic = {
+        sequence.sample_id: sequence
+        for sequence in read_fasta_alignment(classical_to_cryptic).sequences
+    }
+    cross_to_classical = {
+        sequence.sample_id: sequence
+        for sequence in read_fasta_alignment(cryptic_to_classical).sequences
+    }
+
+    classical_results: list[PlacementResult] = []
+    cryptic_results: list[PlacementResult] = []
+    truth_by_id: dict[str, str] = {}
+    source_id_by_id: dict[str, str] = {}
+    for query in classical_queries:
+        classical_results.append(
+            qc_only_result(query, references_without_identical_sequence(query, classical_alignment.sequences), arguments)
+        )
+        cryptic_results.append(qc_only_result(cross_to_cryptic[query.sample_id], cryptic_alignment.sequences, arguments))
+        truth_by_id[query.sample_id] = "CLASSICAL"
+        source_id_by_id[query.sample_id] = query.sample_id.removeprefix("classical::")
+    for query in cryptic_queries:
+        classical_results.append(qc_only_result(cross_to_classical[query.sample_id], classical_alignment.sequences, arguments))
+        cryptic_results.append(
+            qc_only_result(query, references_without_identical_sequence(query, cryptic_alignment.sequences), arguments)
+        )
+        truth_by_id[query.sample_id] = "CRYPTIC"
+        source_id_by_id[query.sample_id] = query.sample_id.removeprefix("cryptic::")
+
+    decisions = choose_reference_panel(
+        classical_results, cryptic_results, arguments.min_panel_distance_separation
+    )
+    write_calibration_records(output, decisions, truth_by_id, source_id_by_id)
+    sweep = panel_threshold_sweep(
+        classical_results,
+        cryptic_results,
+        truth_by_id,
+        arguments.min_panel_distance_separation,
+    )
+    summary = {
+        "version": __version__,
+        "method": "leave_one_unique_sequence_out_panel_distance_calibration",
+        "warning": "This calibrates cross-panel distance gating only; it is not external validation or topology-placement accuracy.",
+        "classical_controls": len(classical_controls),
+        "cryptic_controls": len(cryptic_controls),
+        "default_threshold": arguments.min_panel_distance_separation,
+        "default_result": next(
+            row for row in sweep if row["threshold"] == arguments.min_panel_distance_separation
+        ),
+        "threshold_sweep": sweep,
+        "classical_reference_alignment_sha256": file_sha256(arguments.classical_reference_alignment),
+        "cryptic_reference_alignment_sha256": file_sha256(arguments.cryptic_reference_alignment),
+    }
+    (output / "calibration_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    logger.event(1, "calibration", "Completed panel-gate calibration", **summary["default_result"])
+    (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
+    logger.event(1, "complete", "Panel-gate calibration completed")
+    append_final_event(output, logger.events[-1])
+    return 0
+
+
+def select_unique_sequence_controls(
+    sequences: Sequence[AlignedSequence], maximum: int
+) -> tuple[AlignedSequence, ...]:
+    """Choose deterministic representatives of distinct aligned sequences."""
+
+    groups: dict[tuple[str | None, ...], list[AlignedSequence]] = {}
+    for sequence in sequences:
+        groups.setdefault(sequence.characters, []).append(sequence)
+    representatives = [
+        min(group, key=lambda sequence: sequence.sample_id) for group in groups.values()
+    ]
+    return tuple(sorted(representatives, key=lambda sequence: sequence.sample_id)[:maximum])
+
+
+def calibration_queries(panel: str, controls: Sequence[AlignedSequence]) -> tuple[AlignedSequence, ...]:
+    """Prefix query identifiers so equal IDs cannot collide between panels."""
+
+    return tuple(
+        AlignedSequence(f"{panel}::{sequence.sample_id}", sequence.characters)
+        for sequence in controls
+    )
+
+
+def ungapped_fasta_records(
+    sequences: Sequence[AlignedSequence],
+) -> tuple[tuple[str, str], ...]:
+    """Create raw-like records for cross-panel MAFFT mapping from aligned controls."""
+
+    return tuple(
+        (sequence.sample_id, "".join(base for base in sequence.characters if base is not None))
+        for sequence in sequences
+    )
+
+
+def references_without_identical_sequence(
+    query: AlignedSequence, references: Sequence[AlignedSequence]
+) -> tuple[AlignedSequence, ...]:
+    """Remove every exact sequence duplicate to prevent trivial self matches."""
+
+    retained = tuple(reference for reference in references if reference.characters != query.characters)
+    if not retained:
+        raise ValueError("Leave-one-unique-sequence-out calibration removed every reference")
+    return retained
+
+
+def qc_only_result(
+    query: AlignedSequence, references: Sequence[AlignedSequence], arguments: argparse.Namespace
+) -> PlacementResult:
+    """Evaluate only the panel gate; no tree placement is implied or performed."""
+
+    qc = evaluate_sequence_qc(
+        query,
+        references,
+        min_coverage=arguments.min_coverage,
+        warn_coverage=arguments.warn_coverage,
+        min_comparable_sites=arguments.min_comparable_sites,
+        outlier_distance=arguments.outlier_distance,
+    )
+    return PlacementResult(sample_id=query.sample_id, qc=qc, final_status=qc.status)
+
+
+def panel_threshold_sweep(
+    classical_results: Sequence[PlacementResult],
+    cryptic_results: Sequence[PlacementResult],
+    truth_by_id: dict[str, str],
+    default_threshold: float,
+) -> list[dict[str, object]]:
+    """Report accuracy and retained-call coverage across useful distance margins."""
+
+    thresholds = tuple(sorted({0.0, 0.001, 0.002, 0.003, 0.004, 0.005, 0.0075, 0.01, 0.02, default_threshold}))
+    rows: list[dict[str, object]] = []
+    for threshold in thresholds:
+        decisions = choose_reference_panel(classical_results, cryptic_results, threshold)
+        called = [decision for decision in decisions if decision.assignment in {"CLASSICAL", "CRYPTIC"}]
+        correct = sum(decision.assignment == truth_by_id[decision.sample_id] for decision in called)
+        rows.append(
+            {
+                "threshold": threshold,
+                "controls": len(decisions),
+                "called": len(called),
+                "ambiguous_or_unresolved": len(decisions) - len(called),
+                "correct_calls": correct,
+                "wrong_calls": len(called) - correct,
+                "called_accuracy": correct / len(called) if called else None,
+                "coverage": len(called) / len(decisions) if decisions else 0.0,
+            }
+        )
+    return rows
+
+
+def write_calibration_records(
+    output_directory: Path,
+    decisions: Sequence[object],
+    truth_by_id: dict[str, str],
+    source_id_by_id: dict[str, str],
+) -> None:
+    """Write one auditable calibration record per held-out panel control."""
+
+    fields = [
+        "calibration_id", "source_sample_id", "truth", "assignment", "decision_status",
+        "correct", "classical_nearest_distance", "cryptic_nearest_distance", "distance_margin",
+    ]
+    with (output_directory / "calibration_records.tsv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for decision in decisions:
+            sample_id = getattr(decision, "sample_id")
+            row = {
+                "calibration_id": sample_id,
+                "source_sample_id": source_id_by_id[sample_id],
+                "truth": truth_by_id[sample_id],
+                "assignment": getattr(decision, "assignment"),
+                "decision_status": getattr(decision, "decision_status"),
+                "correct": getattr(decision, "assignment") == truth_by_id[sample_id],
+                "classical_nearest_distance": getattr(decision, "classical_nearest_distance"),
+                "cryptic_nearest_distance": getattr(decision, "cryptic_nearest_distance"),
+                "distance_margin": getattr(decision, "distance_margin"),
+            }
+            for field in ("classical_nearest_distance", "cryptic_nearest_distance", "distance_margin"):
+                row[field] = "" if row[field] is None else format(row[field], ".12g")
+            writer.writerow(row)
 
 
 def map_queries_to_panel(
