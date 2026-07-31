@@ -34,6 +34,22 @@ class Edge:
     length: float
 
 
+@dataclass(frozen=True)
+class PrunedTipAttachment:
+    """Where a removed reference tip attached to its pruned backbone.
+
+    An attachment can remain an internal node or become a point on an edge when
+    pruning suppresses a unary internal node.  The record is intended for
+    leave-one-out validation and is not a phylogenetic support value.
+    """
+
+    kind: str
+    node_id: int | None = None
+    edge_parent_id: int | None = None
+    edge_child_id: int | None = None
+    distal_length: float | None = None
+
+
 class NewickParser:
     """A deliberately small parser for branch-length Newick files."""
 
@@ -239,6 +255,94 @@ class Tree:
                 stack.extend(child.node_id for child in node.children)
         return indices
 
+    def without_tip(self, tip_name: str) -> tuple["Tree", PrunedTipAttachment]:
+        """Return a copied tree with one tip removed and unary nodes suppressed.
+
+        This operation produces the backbone required for an honest
+        leave-one-out placement: the held-out profile and its matching tree tip
+        are both absent before the placement is scored.
+        """
+
+        if tip_name not in self.tip_index:
+            raise ValueError(f"Cannot prune unknown tip '{tip_name}'")
+        if len(self.tips) <= 3:
+            raise ValueError("Leave-one-out validation requires at least four reference tips")
+
+        def clone_subtree(node: Node) -> Node:
+            clone = Node(node_id=node.node_id, name=node.name, length=node.length)
+            for child in node.children:
+                cloned_child = clone_subtree(child)
+                cloned_child.parent = clone
+                clone.children.append(cloned_child)
+            return clone
+
+        root = clone_subtree(self.root)
+        cloned_nodes = {node.node_id: node for node in self._walk(root)}
+        removed_tip = cloned_nodes[self.tips[self.tip_index[tip_name]].node_id]
+        parent = removed_tip.parent
+        if parent is None:
+            raise ValueError("Cannot prune a tree root tip")
+        parent.children.remove(removed_tip)
+        if not parent.children:
+            raise ValueError("Pruning produced an empty internal node")
+
+        if len(parent.children) >= 2:
+            attachment = PrunedTipAttachment(kind="node", node_id=parent.node_id)
+        else:
+            survivor = parent.children[0]
+            if parent.parent is None:
+                survivor.parent = None
+                survivor.length = None
+                root = survivor
+                attachment = PrunedTipAttachment(kind="node", node_id=survivor.node_id)
+            else:
+                grandparent = parent.parent
+                parent_length = parent.length
+                survivor_length = survivor.length
+                if parent_length is None or survivor_length is None:
+                    raise ValueError("Cannot suppress a node without branch lengths")
+                survivor.parent = grandparent
+                survivor.length = parent_length + survivor_length
+                child_index = grandparent.children.index(parent)
+                grandparent.children[child_index] = survivor
+                attachment = PrunedTipAttachment(
+                    kind="edge",
+                    edge_parent_id=grandparent.node_id,
+                    edge_child_id=survivor.node_id,
+                    distal_length=parent_length,
+                )
+
+        return Tree(root, self._cache_limit_bytes // (1024 * 1024)), attachment
+
+    def edge_distance_to_attachment(self, edge: Edge, attachment: PrunedTipAttachment) -> int:
+        """Return a graph-edge distance from a selected edge to a true attachment.
+
+        Zero means the selected edge touches a node attachment or exactly matches
+        an attachment that lies within an edge.  It is a topology diagnostic,
+        not a branch-length error or a support statistic.
+        """
+
+        selected_nodes = (edge.parent_id, edge.child_id)
+        if attachment.kind == "node":
+            if attachment.node_id is None:
+                raise ValueError("Node attachment is missing a node ID")
+            return min(
+                self._node_distance(attachment.node_id, selected_node)
+                for selected_node in selected_nodes
+            )
+        if attachment.kind == "edge":
+            if attachment.edge_parent_id is None or attachment.edge_child_id is None:
+                raise ValueError("Edge attachment is missing edge node IDs")
+            expected_nodes = (attachment.edge_parent_id, attachment.edge_child_id)
+            if frozenset(selected_nodes) == frozenset(expected_nodes):
+                return 0
+            return 1 + min(
+                self._node_distance(expected_node, selected_node)
+                for expected_node in expected_nodes
+                for selected_node in selected_nodes
+            )
+        raise ValueError(f"Unknown attachment kind '{attachment.kind}'")
+
     def tip_span(self, node_id: int) -> tuple[int, int]:
         """Return the contiguous DFS tip-index span below one node."""
 
@@ -273,6 +377,25 @@ class Tree:
             span = (child_spans[0][0], child_spans[-1][1])
         self._tip_spans[node.node_id] = span
         return span
+
+    def _node_distance(self, start_id: int, end_id: int) -> int:
+        """Return unweighted graph distance between two nodes in this tree."""
+
+        if start_id == end_id:
+            return 0
+        if start_id not in self.adjacency or end_id not in self.adjacency:
+            raise ValueError("Attachment node is not present in the pruned tree")
+        queue = [start_id]
+        distances = {start_id: 0}
+        for node_id in queue:
+            next_distance = distances[node_id] + 1
+            for neighbor_id, _ in self.adjacency[node_id]:
+                if neighbor_id == end_id:
+                    return next_distance
+                if neighbor_id not in distances:
+                    distances[neighbor_id] = next_distance
+                    queue.append(neighbor_id)
+        raise ValueError("Tree nodes are disconnected")
 
     def _render_node(self, node: Node) -> str:
         label = quote_label(node.name) if node.name else ""

@@ -65,6 +65,18 @@ class PlacementTests(unittest.TestCase):
         self.assertEqual(reference.site_count, 4)
         self.assertEqual(query.profiles[0].alleles, ("A", "C", "G", "T"))
 
+    def test_pruning_records_the_original_tip_attachment(self) -> None:
+        tree = Tree.from_newick("((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);")
+
+        pruned, attachment = tree.without_tip("A")
+
+        self.assertNotIn("A", pruned.tip_index)
+        self.assertEqual(set(pruned.tip_index), {"B", "C", "D"})
+        self.assertEqual(attachment.kind, "edge")
+        assert attachment.edge_child_id is not None
+        expected_edge = pruned.edge_by_child[attachment.edge_child_id]
+        self.assertEqual(pruned.edge_distance_to_attachment(expected_edge, attachment), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

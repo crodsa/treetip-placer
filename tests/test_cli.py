@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import unittest
+import json
 from pathlib import Path
 
 from treetip_placer.cli import main
@@ -69,7 +70,7 @@ class CliTests(unittest.TestCase):
                     "--preset",
                     "thorough",
                     "--threads",
-                    "1",
+                    "2",
                     "--unresolved-weight",
                     "0",
                 ]
@@ -77,6 +78,42 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(exit_code, 0)
             self.assertIn("query_A", (output / "trees" / "placed_tree.nwk").read_text(encoding="utf-8"))
+        finally:
+            if output.exists():
+                shutil.rmtree(output)
+
+    def test_mlst_leave_one_out_writes_validation_outputs(self) -> None:
+        fixtures = Path("tests/fixtures")
+        output = Path.cwd() / ".treetip-validation-test-output"
+        if output.exists():
+            shutil.rmtree(output)
+        try:
+            exit_code = main(
+                [
+                    "validate-mlst",
+                    "--tree",
+                    str(fixtures / "validation_tree.nwk"),
+                    "--reference-profiles",
+                    str(fixtures / "validation_reference_profiles.tsv"),
+                    "--output",
+                    str(output),
+                    "--max-holdouts",
+                    "2",
+                    "--preset",
+                    "thorough",
+                    "--threads",
+                    "2",
+                    "--unresolved-weight",
+                    "0",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((output / "leave_one_out.tsv").is_file())
+            self.assertTrue((output / "leave_one_out.json").is_file())
+            self.assertTrue((output / "validation_summary.json").is_file())
+            summary = json.loads((output / "validation_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["holdouts_requested"], 2)
         finally:
             if output.exists():
                 shutil.rmtree(output)

@@ -25,6 +25,13 @@ from .profiles import (
     require_reference_profiles_complete,
 )
 from .tree import Tree
+from .validation import (
+    run_parallel_validation,
+    run_serial_validation,
+    select_holdout_ids,
+    summarize_validation,
+    write_validation_outputs,
+)
 
 
 _WORKER_TREE: Tree | None = None
@@ -152,6 +159,57 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Increase stderr progress detail; repeat for more detail.",
     )
+    validate = subparsers.add_parser(
+        "validate-mlst",
+        help="Run pruned leave-one-out validation for an MLST reference panel.",
+    )
+    validate.add_argument("--tree", required=True, help="Reference branch-length Newick tree.")
+    validate.add_argument(
+        "--reference-profiles", required=True, help="Reference MLST allele-profile TSV file."
+    )
+    validate.add_argument("--output", required=True, help="New, empty validation output directory.")
+    validate.add_argument(
+        "--max-holdouts",
+        type=nonnegative_integer,
+        default=0,
+        help="Maximum profiles to hold out; 0 validates every reference profile.",
+    )
+    validate.add_argument(
+        "--preset",
+        choices=("fast", "balanced", "thorough"),
+        default="balanced",
+        help="Search scope for each held-out placement.",
+    )
+    validate.add_argument(
+        "--threads", default="auto", help="Parallel holdout workers; use 'auto' or a positive integer."
+    )
+    validate.add_argument(
+        "--bootstrap",
+        type=nonnegative_integer,
+        default=0,
+        help="Locus bootstrap replicates per held-out profile.",
+    )
+    validate.add_argument("--seed", type=int, default=1, help="Sampling and bootstrap random seed.")
+    validate.add_argument("--candidate-count", type=positive_integer, default=16)
+    validate.add_argument("--candidate-hops", type=positive_integer, default=4)
+    validate.add_argument("--min-coverage", type=probability, default=0.70)
+    validate.add_argument("--warn-coverage", type=probability, default=0.90)
+    validate.add_argument("--min-comparable-loci", type=positive_integer, default=3)
+    validate.add_argument("--outlier-distance", type=probability, default=0.50)
+    validate.add_argument("--unresolved-weight", type=probability, default=0.60)
+    validate.add_argument(
+        "--max-cache-megabytes",
+        type=positive_integer,
+        default=256,
+        help="Per-process limit for cached node-to-tip distance rows.",
+    )
+    validate.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase stderr progress detail; repeat for more detail.",
+    )
     return parser
 
 
@@ -163,6 +221,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if arguments.command == "place":
             return run_place(arguments)
+        if arguments.command == "validate-mlst":
+            return run_validate_mlst(arguments)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
@@ -292,6 +352,115 @@ def run_place(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def run_validate_mlst(arguments: argparse.Namespace) -> int:
+    """Hold out known MLST references to calibrate placement and QC behavior."""
+
+    logger = EventLogger(arguments.verbose)
+    logger.event(1, "start", "Starting MLST leave-one-out validation", version=__version__)
+    output = prepare_output_directory(arguments.output)
+    tree = Tree.from_path(arguments.tree, arguments.max_cache_megabytes)
+    if len(tree.tips) < 4:
+        raise ValueError("MLST leave-one-out validation requires at least four reference tips")
+    references = read_profile_table(arguments.reference_profiles)
+    require_reference_profiles_complete(references)
+    tree_tip_names = set(tree.tip_index)
+    reference_by_id = references.by_id
+    reference_names = set(reference_by_id)
+    if tree_tip_names != reference_names:
+        missing_in_profiles = sorted(tree_tip_names - reference_names)
+        missing_in_tree = sorted(reference_names - tree_tip_names)
+        details: list[str] = []
+        if missing_in_profiles:
+            details.append("tips absent from reference profiles: " + ", ".join(missing_in_profiles[:10]))
+        if missing_in_tree:
+            details.append("profile IDs absent from tree: " + ", ".join(missing_in_tree[:10]))
+        raise ValueError("Reference tree and data IDs differ; " + "; ".join(details))
+    references_in_tip_order = tuple(
+        reference_by_id[tip.name or ""] for tip in tree.tips
+    )
+    holdout_ids = select_holdout_ids(
+        references_in_tip_order, arguments.max_holdouts, arguments.seed
+    )
+    config = PlacementConfig(
+        preset=arguments.preset,
+        candidate_count=arguments.candidate_count,
+        candidate_hops=arguments.candidate_hops,
+        bootstrap_replicates=arguments.bootstrap,
+        bootstrap_seed=arguments.seed,
+        min_coverage=arguments.min_coverage,
+        warn_coverage=arguments.warn_coverage,
+        min_comparable_loci=arguments.min_comparable_loci,
+        outlier_distance=arguments.outlier_distance,
+        unresolved_weight=arguments.unresolved_weight,
+    )
+    workers = resolve_threads(arguments.threads, len(holdout_ids))
+    logger.event(
+        1,
+        "validation",
+        "Validated MLST reference panel",
+        reference_tips=len(references_in_tip_order),
+        holdouts=len(holdout_ids),
+        loci=len(references.loci),
+        workers=workers,
+        preset=config.preset,
+    )
+    started_validation = time.perf_counter()
+
+    def validation_progress(completed: int, total: int) -> None:
+        log_progress(logger, completed, total, started_validation, stage="validation")
+
+    if workers == 1:
+        records = run_serial_validation(
+            holdout_ids,
+            tree,
+            references_in_tip_order,
+            config,
+            validation_progress,
+        )
+    else:
+        try:
+            records = run_parallel_validation(
+                holdout_ids,
+                tree.newick(),
+                references_in_tip_order,
+                config,
+                arguments.max_cache_megabytes,
+                workers,
+                validation_progress,
+            )
+        except PermissionError as error:
+            logger.event(
+                1,
+                "validation",
+                "Parallel workers are unavailable in this environment; falling back to serial validation",
+                error=str(error),
+            )
+            workers = 1
+            records = run_serial_validation(
+                holdout_ids,
+                tree,
+                references_in_tip_order,
+                config,
+                validation_progress,
+            )
+    summary = summarize_validation(records)
+    logger.event(1, "validation", "Completed MLST leave-one-out validation", **summary)
+    manifest = {
+        "version": __version__,
+        "validation_method": "pruned_leave_one_out_mlst",
+        "tree_path": str(Path(arguments.tree).resolve()),
+        "reference_profiles_path": str(Path(arguments.reference_profiles).resolve()),
+        "tree_sha256": file_sha256(arguments.tree),
+        "reference_profiles_sha256": file_sha256(arguments.reference_profiles),
+        "config": {**asdict(config), "workers": workers, "max_holdouts": arguments.max_holdouts},
+    }
+    logger.event(1, "output", "Writing validation outputs", directory=str(output))
+    logger.event(1, "complete", "Validation run completed", **summary)
+    write_validation_outputs(output, records, summary, manifest, logger.events)
+    (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
+    return 0
+
+
 def load_input_adapter(
     arguments: argparse.Namespace,
 ) -> tuple[ProfileTable, tuple[Profile, ...], str, tuple[str, ...]]:
@@ -381,7 +550,14 @@ def run_serial_placements(
     return results
 
 
-def log_progress(logger: EventLogger, completed: int, total: int, started_at: float) -> None:
+def log_progress(
+    logger: EventLogger,
+    completed: int,
+    total: int,
+    started_at: float,
+    *,
+    stage: str = "placement",
+) -> None:
     """Emit bounded progress events without flooding logs for large batches."""
 
     interval = max(1, total // 20)
@@ -392,7 +568,7 @@ def log_progress(logger: EventLogger, completed: int, total: int, started_at: fl
     remaining = (total - completed) / rate if rate else None
     logger.event(
         1,
-        "placement",
+        stage,
         "Progress",
         completed=completed,
         total=total,
@@ -458,6 +634,29 @@ def append_final_event(output: Path, event: dict[str, object]) -> None:
             + (" " + json.dumps(extra, sort_keys=True) if extra else "")
             + "\n"
         )
+
+
+def format_event_log(events: Sequence[dict[str, object]]) -> str:
+    """Render the human-readable counterpart of the structured event stream."""
+
+    return "".join(
+        f"[{event['elapsed_seconds']:8.2f}s] {event['stage']}: {event['message']}"
+        + (
+            " "
+            + json.dumps(
+                {
+                    key: value
+                    for key, value in event.items()
+                    if key not in {"elapsed_seconds", "level", "stage", "message"}
+                },
+                sort_keys=True,
+            )
+            if len(event) > 4
+            else ""
+        )
+        + "\n"
+        for event in events
+    )
 
 
 def positive_integer(value: str) -> int:

@@ -23,8 +23,16 @@ The post-placement gate can mark a placed query as `UNRESOLVED` when its relativ
 
 Thresholds are configuration values, not biological constants. They should be calibrated on leave-one-out placement experiments using the intended reference panel.
 
+## Leave-one-out validation
+
+`treetip validate-mlst` requires a complete MLST reference panel and a branch-length tree with at least four tips. For each selected reference sample, it removes the sample and its matching tip from a copied tree before placement. If pruning creates a unary internal node, that node is suppressed while preserving the surviving path length.
+
+The true attachment is represented as either a retained node or a point in a newly merged edge. `topological_distance_edges` is zero when the selected edge touches a true node attachment or exactly matches a true attachment within an edge. It is a reproducible local topology diagnostic, not a branch-support value. `--max-holdouts 0` evaluates all reference profiles; a positive value chooses a seed-controlled subset.
+
 ## Outputs
 
 `placed_tree.nwk` contains all successfully placed queries, independently scored against the original reference tree. `placed_tree.nexus` contains the same tree in Nexus form. `placements.tsv` is the authoritative human-readable table. `run_manifest.json` records input checksums, configuration, timing, and software version.
+
+Validation output is deliberately separate from a placement run: `leave_one_out.tsv` and `leave_one_out.json` hold one record per held-out reference, `validation_summary.json` contains aggregate recovery metrics, and `validation_manifest.json` records reference checksums and configuration.
 
 The experimental `placements.jplace` file uses a distance-objective field rather than likelihood values and must not be interpreted as a maximum-likelihood JPlace result.

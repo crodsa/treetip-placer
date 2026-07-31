@@ -17,6 +17,7 @@ Version `0.1.0` is a tested MVP with a categorical-distance backend.
 - Pre-placement QC and post-placement resolution status.
 - Optional bootstrap resampling of loci or alignment sites.
 - Parallel query execution, with explicit serial fallback when process workers are unavailable.
+- Pruned MLST leave-one-out validation, including deterministic holdout sampling, parallel workers, attachment-neighbourhood recovery, and topology-distance reporting.
 - Newick, Nexus, TSV, JSON, JSONL, and experimental distance-JPlace outputs.
 
 ## Important limitations
@@ -71,7 +72,7 @@ When real MLST data are available:
 
 ## Next development milestones
 
-1. Real-data MLST validation and QC calibration.
+1. Real-data MLST validation and QC calibration using the implemented leave-one-out command.
 2. Robust reference-package manifest with immutable masks, partitions, and provenance.
 3. Maximum-likelihood aligned-sequence backend with explicit SNP ascertainment metadata.
 4. Conditional local topology refinement and local support recomputation.

@@ -54,7 +54,7 @@ For SNP-only matrices, preserve the original SNP selection, masking, and ascerta
 treetip place \
   --tree reference_tree.nwk \
   --reference-profiles reference_profiles.tsv \
-  --queries new_profiles.tsv \
+  --query-profiles new_profiles.tsv \
   --output placement_run \
   --preset balanced \
   --threads auto \
@@ -63,6 +63,23 @@ treetip place \
 ```
 
 `placed_tree.nwk` is directly usable in FigTree, iTOL, Dendroscope, ETE, and most Newick-compatible programs. Detailed placement uncertainty belongs in `placements.tsv` and `placements.json` rather than in overloaded Newick node labels.
+
+## MLST leave-one-out validation
+
+Before applying the tool to new samples, use known reference profiles as held-out queries. `validate-mlst` removes both the selected profile and its original tip from a copied backbone, suppresses the resulting unary node when needed, then compares the selected placement edge with the known attachment neighbourhood. This avoids the information leak of leaving the held-out tip in the tree.
+
+```bash
+treetip validate-mlst \
+  --tree reference_tree.nwk \
+  --reference-profiles reference_profiles.tsv \
+  --output mlst_leave_one_out \
+  --preset thorough \
+  --threads auto \
+  --bootstrap 100 \
+  --verbose
+```
+
+`leave_one_out.tsv` is directly importable into R, Python, or spreadsheet software. `validation_summary.json` reports recovery rate and graph-edge distance to the known attachment; these are topology diagnostics, not likelihood supports. For large panels, use `--max-holdouts` with `--seed` for a reproducible subset. The validation protocol is in [docs/validation.md](docs/validation.md).
 
 ## Scientific scope
 

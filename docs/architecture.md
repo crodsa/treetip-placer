@@ -32,6 +32,12 @@ Queries are independent against a reference snapshot and are distributed across 
 
 Bootstrap is intentionally performed inside each query worker. This avoids nested parallelism and oversubscription when many queries are supplied.
 
+## Validation engine
+
+The MLST validation command implements pruned leave-one-out evaluation. It removes each held-out reference tip from a copied backbone before scoring the corresponding profile, so its original terminal edge cannot leak into candidate selection. Pruning preserves path lengths when a unary node is suppressed. The engine records whether the selected edge recovers the known attachment neighbourhood and the graph-edge distance otherwise.
+
+Held-out placements are independent and can use the same process-worker strategy as ordinary query placement. This enables fixed-seed subsets for large panels while keeping result order deterministic.
+
 ## Output contract
 
 `placed_tree.nwk` is a simple drawing-oriented tree. `placed_tree.nexus` offers the same topology in Nexus form. `placements.tsv` is the authoritative tabular result, `alternative_edges.tsv` holds ambiguity information, and `query_qc.tsv` describes all gate findings. `run_manifest.json` and `events.jsonl` make a run reproducible.
