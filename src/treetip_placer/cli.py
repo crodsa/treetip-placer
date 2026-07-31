@@ -6,17 +6,24 @@ import argparse
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Sequence
 
 from . import __version__
-from .alignment import read_fasta_alignment, require_matching_alignment_widths
-from .models import AlignedSequence, PlacementConfig, RunMetadata
-from .outputs import write_run_outputs
+from .alignment import (
+    read_fasta_alignment,
+    read_fasta_records,
+    require_matching_alignment_widths,
+    write_fasta_records,
+)
+from .models import AlignedSequence, PlacementConfig, PlacementResult, RunMetadata
+from .outputs import render_placed_tree, write_run_outputs
+from .panel_selection import choose_reference_panel, write_panel_selection_outputs
 from .placement import place_query
 from .tree import Tree
 
@@ -24,6 +31,15 @@ from .tree import Tree
 _WORKER_TREE: Tree | None = None
 _WORKER_REFERENCES: tuple[AlignedSequence, ...] = ()
 _WORKER_CONFIG: PlacementConfig | None = None
+
+
+@dataclass(frozen=True)
+class PanelRun:
+    """Placement results and immutable tree for one named reference panel."""
+
+    name: str
+    tree: Tree
+    results: tuple[PlacementResult, ...]
 
 
 def worker_initialize(
@@ -94,50 +110,76 @@ def build_parser() -> argparse.ArgumentParser:
     )
     place.add_argument("--query-alignment", required=True, help="Query fixed-column FASTA alignment.")
     place.add_argument("--output", required=True, help="New, empty output directory.")
-    place.add_argument(
+    add_placement_controls(place)
+
+    auto = subparsers.add_parser(
+        "place-auto",
+        help="Map raw query FASTA to classical and cryptic panels, then select conservatively.",
+    )
+    auto.add_argument("--classical-tree", required=True, help="Classical reference branch-length Newick tree.")
+    auto.add_argument("--classical-reference-alignment", required=True, help="Classical reference fixed-column FASTA alignment.")
+    auto.add_argument("--cryptic-tree", required=True, help="Cryptic reference branch-length Newick tree.")
+    auto.add_argument("--cryptic-reference-alignment", required=True, help="Cryptic reference fixed-column FASTA alignment.")
+    auto.add_argument("--query-fasta", required=True, help="Raw query FASTA; mapped separately to both panels.")
+    auto.add_argument("--mafft", required=True, help="MAFFT executable or wrapper for --add --keeplength mapping.")
+    auto.add_argument("--mafft-threads", type=positive_integer, default=1, help="MAFFT threads per mapping.")
+    auto.add_argument(
+        "--min-panel-distance-separation",
+        type=nonnegative_float,
+        default=0.005,
+        help="Minimum nearest-reference distance advantage required for a panel assignment.",
+    )
+    auto.add_argument("--output", required=True, help="New, empty output directory.")
+    add_placement_controls(auto)
+    return parser
+
+
+def add_placement_controls(parser: argparse.ArgumentParser) -> None:
+    """Add the shared placement and QC controls to a command parser."""
+
+    parser.add_argument(
         "--preset",
         choices=("fast", "balanced", "thorough"),
         default="balanced",
         help="Search scope: fast local, balanced local, or exhaustive thorough search.",
     )
-    place.add_argument(
+    parser.add_argument(
         "--threads",
         default="auto",
         help="Parallel query workers; use 'auto' or a positive integer.",
     )
-    place.add_argument(
+    parser.add_argument(
         "--bootstrap",
         type=nonnegative_integer,
         default=0,
         help="Alignment-site bootstrap replicates per successfully placed query.",
     )
-    place.add_argument("--seed", type=int, default=1, help="Bootstrap random seed.")
-    place.add_argument("--candidate-count", type=positive_integer, default=16)
-    place.add_argument("--candidate-hops", type=positive_integer, default=4)
-    place.add_argument("--min-coverage", type=probability, default=0.70)
-    place.add_argument("--warn-coverage", type=probability, default=0.90)
-    place.add_argument("--min-comparable-sites", type=positive_integer, default=100)
-    place.add_argument("--outlier-distance", type=probability, default=0.50)
-    place.add_argument("--unresolved-weight", type=probability, default=0.60)
-    place.add_argument(
+    parser.add_argument("--seed", type=int, default=1, help="Bootstrap random seed.")
+    parser.add_argument("--candidate-count", type=positive_integer, default=16)
+    parser.add_argument("--candidate-hops", type=positive_integer, default=4)
+    parser.add_argument("--min-coverage", type=probability, default=0.70)
+    parser.add_argument("--warn-coverage", type=probability, default=0.90)
+    parser.add_argument("--min-comparable-sites", type=positive_integer, default=100)
+    parser.add_argument("--outlier-distance", type=probability, default=0.50)
+    parser.add_argument("--unresolved-weight", type=probability, default=0.60)
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Attempt placement after a pre-placement QC failure; failures remain annotated.",
     )
-    place.add_argument(
+    parser.add_argument(
         "--max-cache-megabytes",
         type=positive_integer,
         default=256,
         help="Per-process limit for cached node-to-tip distance rows.",
     )
-    place.add_argument(
+    parser.add_argument(
         "-v",
         "--verbose",
         action="count",
         default=0,
         help="Increase stderr progress detail; repeat for more detail.",
     )
-    return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -148,6 +190,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if arguments.command == "place":
             return run_place(arguments)
+        if arguments.command == "place-auto":
+            return run_auto_place(arguments)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
@@ -193,19 +237,7 @@ def run_place(arguments: argparse.Namespace) -> int:
     references_in_tip_order = tuple(
         reference_by_id[tip.name or ""] for tip in tree.tips
     )
-    config = PlacementConfig(
-        preset=arguments.preset,
-        candidate_count=arguments.candidate_count,
-        candidate_hops=arguments.candidate_hops,
-        bootstrap_replicates=arguments.bootstrap,
-        bootstrap_seed=arguments.seed,
-        min_coverage=arguments.min_coverage,
-        warn_coverage=arguments.warn_coverage,
-        min_comparable_sites=arguments.min_comparable_sites,
-        outlier_distance=arguments.outlier_distance,
-        unresolved_weight=arguments.unresolved_weight,
-        force=arguments.force,
-    )
+    config = placement_config_from_arguments(arguments)
     logger.event(
         1,
         "input",
@@ -273,6 +305,275 @@ def run_place(arguments: argparse.Namespace) -> int:
     logger.event(1, "complete", "Run completed", **summary)
     append_final_event(output, logger.events[-1])
     return 0
+
+
+def run_auto_place(arguments: argparse.Namespace) -> int:
+    """Map raw input to both panels, place independently, and select conservatively."""
+
+    logger = EventLogger(arguments.verbose)
+    logger.event(1, "start", "Starting automatic classical/cryptic panel placement", version=__version__)
+    output = prepare_output_directory(arguments.output)
+    source_records = read_fasta_records(arguments.query_fasta)
+    source_ids = tuple(sample_id for sample_id, _ in source_records)
+    logger.event(1, "input", "Validated raw query FASTA", queries=len(source_ids))
+
+    mapping_directory = output / "mapping"
+    mapping_directory.mkdir()
+    classical_queries = map_queries_to_panel(
+        panel_name="classical",
+        mafft=arguments.mafft,
+        mafft_threads=arguments.mafft_threads,
+        query_fasta=arguments.query_fasta,
+        query_ids=source_ids,
+        reference_alignment=arguments.classical_reference_alignment,
+        mapping_directory=mapping_directory,
+        logger=logger,
+    )
+    cryptic_queries = map_queries_to_panel(
+        panel_name="cryptic",
+        mafft=arguments.mafft,
+        mafft_threads=arguments.mafft_threads,
+        query_fasta=arguments.query_fasta,
+        query_ids=source_ids,
+        reference_alignment=arguments.cryptic_reference_alignment,
+        mapping_directory=mapping_directory,
+        logger=logger,
+    )
+
+    panels_root = output / "panels"
+    panels_root.mkdir()
+    classical = run_panel_placement(
+        panel_name="classical",
+        tree_path=arguments.classical_tree,
+        reference_alignment_path=arguments.classical_reference_alignment,
+        query_alignment_path=classical_queries,
+        output_directory=panels_root / "classical",
+        arguments=arguments,
+        logger=logger,
+    )
+    cryptic = run_panel_placement(
+        panel_name="cryptic",
+        tree_path=arguments.cryptic_tree,
+        reference_alignment_path=arguments.cryptic_reference_alignment,
+        query_alignment_path=cryptic_queries,
+        output_directory=panels_root / "cryptic",
+        arguments=arguments,
+        logger=logger,
+    )
+    decisions = choose_reference_panel(
+        classical.results,
+        cryptic.results,
+        arguments.min_panel_distance_separation,
+    )
+    selection_summary = summarize_decisions(decisions)
+    logger.event(1, "selection", "Completed conservative panel selection", **selection_summary)
+    write_panel_selection_outputs(
+        output,
+        decisions,
+        {
+            "version": __version__,
+            "query_fasta_path": str(Path(arguments.query_fasta).resolve()),
+            "query_fasta_sha256": file_sha256(arguments.query_fasta),
+            "classical_tree_path": str(Path(arguments.classical_tree).resolve()),
+            "classical_reference_alignment_path": str(Path(arguments.classical_reference_alignment).resolve()),
+            "cryptic_tree_path": str(Path(arguments.cryptic_tree).resolve()),
+            "cryptic_reference_alignment_path": str(Path(arguments.cryptic_reference_alignment).resolve()),
+            "minimum_distance_separation": arguments.min_panel_distance_separation,
+            "selection_method": "nearest_reference_normalized_hamming_distance",
+            "warning": "Distance-separation thresholds require empirical calibration for each pair of panels.",
+        },
+    )
+    write_selected_panel_trees(output, classical, cryptic, decisions)
+    (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
+    logger.event(1, "complete", "Automatic panel placement completed", **selection_summary)
+    append_final_event(output, logger.events[-1])
+    return 0
+
+
+def map_queries_to_panel(
+    *,
+    panel_name: str,
+    mafft: str,
+    mafft_threads: int,
+    query_fasta: str,
+    query_ids: Sequence[str],
+    reference_alignment: str,
+    mapping_directory: Path,
+    logger: EventLogger,
+) -> Path:
+    """Use MAFFT add/keeplength mapping and retain only mapped query records."""
+
+    logger.event(1, "mapping", "Mapping queries to reference panel", panel=panel_name)
+    mapped_with_reference = mapping_directory / f"{panel_name}.mapped_with_reference.fasta"
+    mafft_stderr = mapping_directory / f"{panel_name}.mafft.stderr.log"
+    command = [
+        mafft,
+        "--add",
+        str(Path(query_fasta).resolve()),
+        "--keeplength",
+        "--thread",
+        str(mafft_threads),
+        str(Path(reference_alignment).resolve()),
+    ]
+    try:
+        with mapped_with_reference.open("w", encoding="utf-8", newline="\n") as stdout:
+            completed = subprocess.run(command, stdout=stdout, stderr=subprocess.PIPE, text=True, check=False)
+    except FileNotFoundError as error:
+        raise ValueError(f"MAFFT executable was not found: {mafft}") from error
+    mafft_stderr.write_text(completed.stderr, encoding="utf-8")
+    if completed.returncode:
+        raise ValueError(
+            f"MAFFT mapping failed for the {panel_name} panel (exit {completed.returncode}); "
+            f"see {mafft_stderr}"
+        )
+    mapped_by_id = dict(read_fasta_records(mapped_with_reference))
+    missing = [sample_id for sample_id in query_ids if sample_id not in mapped_by_id]
+    if missing:
+        raise ValueError(
+            f"MAFFT output for the {panel_name} panel omitted query IDs: {', '.join(missing[:10])}"
+        )
+    mapped_queries = mapping_directory / f"{panel_name}.queries_mapped.fasta"
+    write_fasta_records(mapped_queries, tuple((sample_id, mapped_by_id[sample_id]) for sample_id in query_ids))
+    require_matching_alignment_widths(
+        read_fasta_alignment(reference_alignment), read_fasta_alignment(mapped_queries)
+    )
+    logger.event(
+        1,
+        "mapping",
+        "Completed panel mapping",
+        panel=panel_name,
+        mapped_queries=len(query_ids),
+        columns=read_fasta_alignment(mapped_queries).site_count,
+    )
+    return mapped_queries
+
+
+def run_panel_placement(
+    *,
+    panel_name: str,
+    tree_path: str,
+    reference_alignment_path: str,
+    query_alignment_path: Path,
+    output_directory: Path,
+    arguments: argparse.Namespace,
+    logger: EventLogger,
+) -> PanelRun:
+    """Run the existing fixed-tree pipeline for one named panel."""
+
+    tree = Tree.from_path(tree_path, arguments.max_cache_megabytes)
+    if len(tree.tips) < 2:
+        raise ValueError(f"The {panel_name} reference tree must contain at least two tips")
+    reference_alignment = read_fasta_alignment(reference_alignment_path)
+    query_alignment = read_fasta_alignment(query_alignment_path)
+    require_matching_alignment_widths(reference_alignment, query_alignment)
+    reference_by_id = {sequence.sample_id: sequence for sequence in reference_alignment.sequences}
+    if set(tree.tip_index) != set(reference_by_id):
+        raise ValueError(f"The {panel_name} reference tree tips do not exactly match its alignment IDs")
+    overlap = set(sequence.sample_id for sequence in query_alignment.sequences) & set(reference_by_id)
+    if overlap:
+        raise ValueError(
+            f"Query sample_id values already occur in the {panel_name} reference tree: "
+            + ", ".join(sorted(overlap)[:10])
+        )
+    references = tuple(reference_by_id[tip.name or ""] for tip in tree.tips)
+    config = placement_config_from_arguments(arguments)
+    workers = resolve_threads(arguments.threads, len(query_alignment.sequences))
+    logger.event(
+        1,
+        "placement",
+        "Running panel placements",
+        panel=panel_name,
+        reference_tips=len(references),
+        queries=len(query_alignment.sequences),
+        columns=reference_alignment.site_count,
+        workers=workers,
+    )
+    started = time.perf_counter()
+    if workers == 1:
+        results = run_serial_placements(query_alignment.sequences, references, tree, config, logger, started)
+    else:
+        try:
+            results = run_parallel_placements(
+                query_alignment.sequences,
+                tree.newick(),
+                references,
+                config,
+                arguments.max_cache_megabytes,
+                workers,
+                logger,
+                started,
+            )
+        except PermissionError as error:
+            logger.event(1, "placement", "Parallel workers unavailable; using serial placement", panel=panel_name, error=str(error))
+            workers = 1
+            results = run_serial_placements(query_alignment.sequences, references, tree, config, logger, started)
+    summary = summarize_results(results)
+    logger.event(1, "placement", "Completed panel placements", panel=panel_name, **summary)
+    metadata = RunMetadata(
+        version=__version__,
+        tree_path=str(Path(tree_path).resolve()),
+        reference_alignment_path=str(Path(reference_alignment_path).resolve()),
+        query_alignment_path=str(query_alignment_path.resolve()),
+        tree_sha256=file_sha256(tree_path),
+        reference_alignment_sha256=file_sha256(reference_alignment_path),
+        query_alignment_sha256=file_sha256(query_alignment_path),
+        config={**asdict(config), "input_kind": "mafft_add_keeplength_mapped_fasta", "panel": panel_name, "workers": workers},
+    )
+    write_run_outputs(output_directory, tree, results, metadata, logger.events)
+    return PanelRun(panel_name, tree, tuple(results))
+
+
+def write_selected_panel_trees(
+    output_directory: Path,
+    classical: PanelRun,
+    cryptic: PanelRun,
+    decisions: Sequence[object],
+) -> None:
+    """Write one directly drawable placed tree per selected panel assignment."""
+
+    selected_ids = {
+        panel: {
+            getattr(decision, "sample_id")
+            for decision in decisions
+            if getattr(decision, "selected_panel") == panel
+        }
+        for panel in ("classical", "cryptic")
+    }
+    trees_directory = output_directory / "selected_trees"
+    trees_directory.mkdir()
+    for panel in (classical, cryptic):
+        selected_results = [result for result in panel.results if result.sample_id in selected_ids[panel.name]]
+        (trees_directory / f"{panel.name}.selected_placed_tree.nwk").write_text(
+            render_placed_tree(panel.tree, selected_results), encoding="utf-8"
+        )
+
+
+def summarize_decisions(decisions: Sequence[object]) -> dict[str, int]:
+    """Count the durable cross-panel assignment labels."""
+
+    counts: dict[str, int] = {}
+    for decision in decisions:
+        assignment = getattr(decision, "assignment")
+        counts[assignment] = counts.get(assignment, 0) + 1
+    return {f"queries_{label.lower()}": count for label, count in sorted(counts.items())}
+
+
+def placement_config_from_arguments(arguments: argparse.Namespace) -> PlacementConfig:
+    """Build the immutable core configuration shared by placement commands."""
+
+    return PlacementConfig(
+        preset=arguments.preset,
+        candidate_count=arguments.candidate_count,
+        candidate_hops=arguments.candidate_hops,
+        bootstrap_replicates=arguments.bootstrap,
+        bootstrap_seed=arguments.seed,
+        min_coverage=arguments.min_coverage,
+        warn_coverage=arguments.warn_coverage,
+        min_comparable_sites=arguments.min_comparable_sites,
+        outlier_distance=arguments.outlier_distance,
+        unresolved_weight=arguments.unresolved_weight,
+        force=arguments.force,
+    )
 
 
 def run_validate_mlst(arguments: argparse.Namespace) -> int:
@@ -603,6 +904,15 @@ def probability(value: str) -> float:
     number = float(value)
     if not 0.0 <= number <= 1.0:
         raise argparse.ArgumentTypeError("must be between 0 and 1")
+    return number
+
+
+def nonnegative_float(value: str) -> float:
+    """Argparse validator for a non-negative floating-point threshold."""
+
+    number = float(value)
+    if number < 0.0:
+        raise argparse.ArgumentTypeError("must be non-negative")
     return number
 
 

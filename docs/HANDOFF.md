@@ -12,6 +12,7 @@ TreeTip Placer places aligned nucleotide sequences on an immutable reference tre
 - Distance-based constrained least-squares placement with local or exhaustive candidate search.
 - Pre-placement QC, optional site bootstrap, parallel query execution, and explicit progress logs.
 - Newick, Nexus, TSV, JSON, JSONL, and experimental distance-JPlace outputs.
+- `place-auto` maps an uploaded FASTA independently to paired classical and cryptic references with MAFFT `--add --keeplength`, runs both placements, and writes an auditable conservative panel assignment plus selected-panel trees.
 
 ## Important limitations
 
@@ -30,10 +31,14 @@ python -m unittest discover -s tests -v
 
 A local, non-versioned 135-sequence cryptic reference alignment and IQ-TREE 3 inference were created at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\cryptic_reference_iqtree3_20260731`. The source sequences remain intact. MAFFT produced 3501 columns and retained the twelve 3500-nt records with one gap each. IQ-TREE 3 used `-m MFP -B 1000 --alrt 1000 --bnni`.
 
+## Automatic-panel stress test
+
+The local run at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\auto_panel_stress_test_20260731` confirmed two known cryptic queries as `CRYPTIC` and known clade-4 classical query `9261_clade4?_cryptic.fna` as `CLASSICAL`. The provisional default distance margin is `0.005`; it requires broader labelled calibration before a scientific release.
+
 ## Next milestones
 
-1. Map new batch sequences to the cryptic reference alignment and run placement.
-2. Add alignment leave-one-out validation and calibrate QC thresholds for the cryptic panel.
+1. Build a labelled classical/cryptic calibration set to estimate the automatic panel-selection threshold and boundary error rate.
+2. Add alignment leave-one-out validation and panel-pair calibration reports.
 3. Implement maximum-likelihood placement and partition-aware reference manifests.
 
 ## Repository state

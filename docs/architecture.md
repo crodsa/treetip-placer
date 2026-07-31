@@ -10,6 +10,8 @@ The FASTA adapter represents callable nucleotide columns as an ordered sequence.
 
 The QC gate reports coverage, comparable sites, ambiguous bases, panel distance, diffuse placements, and long terminal branches. Query placements run independently in process workers, with a recorded serial fallback when workers are unavailable. Bootstrap resampling occurs inside each worker to avoid nested parallelism.
 
+`place-auto` maps an uploaded FASTA independently to a classical and a cryptic immutable package using MAFFT `--add --keeplength`. Each mapped query receives a full independent placement. The selector compares only nearest-reference normalized Hamming distances because WLS edge objectives and heuristic weights are not comparable across differently sized trees. It emits a panel label only when the winning distance margin exceeds a recorded calibration threshold; otherwise it emits `AMBIGUOUS` or `UNRESOLVED`.
+
 ## Reference packages
 
 A reference package must preserve the original alignment, tree, sample-ID mapping, filtering/masking rules, sequence partitions when available, software versions, and checksums. A cryptic-only package and a mixed cryptic–classical package require separate calibration because their distance distributions differ.

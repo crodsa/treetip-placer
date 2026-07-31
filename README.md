@@ -16,6 +16,25 @@ Tabular MLST allele-profile inputs are intentionally unsupported.
 
 The program will reject unequal alignment widths rather than silently realigning, trimming, padding, or dropping query sites. For SNP-only matrices, retain the original SNP-selection, masking, and ascertainment metadata beside the reference package.
 
+## Automatic classical/cryptic selection
+
+When the origin of an uploaded isolate is unknown, use `place-auto`. It maps the raw query FASTA independently to the immutable classical and cryptic alignments with MAFFT `--add --keeplength`, runs the complete QC/placement workflow for both panels, and then compares the nearest-reference normalized distances.
+
+```bash
+treetip place-auto \
+  --classical-tree classical.treefile \
+  --classical-reference-alignment classical_aligned.fasta \
+  --cryptic-tree cryptic.treefile \
+  --cryptic-reference-alignment cryptic_aligned.fasta \
+  --query-fasta uploaded_queries.fasta \
+  --mafft /path/to/mafft \
+  --output automatic_run \
+  --bootstrap 100 \
+  --verbose
+```
+
+The result is deliberately conservative. `panel_assignment.tsv` contains one `CLASSICAL`, `CRYPTIC`, `AMBIGUOUS`, or `UNRESOLVED` call per query. A call is made only when its nearest-reference distance is better than the other panel by `--min-panel-distance-separation` (default `0.005`). This is a provisional threshold and must be calibrated with known classical, cryptic, and boundary samples for the exact pair of reference panels. `selected_trees/` contains one directly drawable Newick tree per selected panel; `panels/` retains both complete, auditable placement runs.
+
 ## Quick start
 
 ```bash
@@ -41,6 +60,7 @@ Each query receives `PASS`, `WARN`, `FAIL`, or `UNRESOLVED`. The gate checks ali
 - The scorer is categorical fixed-column distance, not maximum likelihood.
 - Relative-fit weights are heuristic distance-objective weights, not likelihood weight ratios or posterior probabilities.
 - Local NNI/SPR refinement and recomputed local support are not yet implemented.
+- Cross-panel assignment is a distance gate, not a taxonomic classifier or a phylogenetic likelihood-ratio test.
 
 ## Development
 
