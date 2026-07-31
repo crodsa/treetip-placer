@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "treetip-placer"
-version = "0.4.2"
+version = "0.5.0"
 description = "Quality-controlled placement of fixed-column FASTA alignments on a reference tree."
 readme = "README.md"
 requires-python = ">=3.11"

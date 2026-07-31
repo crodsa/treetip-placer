@@ -33,6 +33,7 @@ from .reference_package import (
     load_paired_reference_package,
     validate_paired_reference_package,
 )
+from .reports import write_auto_report
 from .sequence import evaluate_sequence_qc
 from .tree import Tree
 
@@ -487,24 +488,22 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     )
     selection_summary = summarize_decisions(decisions)
     logger.event(1, "selection", "Completed conservative panel selection", **selection_summary)
-    write_panel_selection_outputs(
-        output,
-        decisions,
-        {
-            "version": __version__,
-            "query_fasta_path": str(Path(arguments.query_fasta).resolve()),
-            "query_fasta_sha256": file_sha256(arguments.query_fasta),
-            "reference_package_path": str(package.manifest_path) if package.manifest_path else None,
-            "classical_tree_path": str(package.classical.tree_path),
-            "classical_reference_alignment_path": str(package.classical.alignment_path),
-            "cryptic_tree_path": str(package.cryptic.tree_path),
-            "cryptic_reference_alignment_path": str(package.cryptic.alignment_path),
-            "minimum_distance_separation": minimum_distance_separation,
-            "selection_method": "nearest_reference_normalized_hamming_distance",
-            "warning": "Distance-separation thresholds require empirical calibration for each pair of panels.",
-        },
-    )
+    selection_metadata = {
+        "version": __version__,
+        "query_fasta_path": str(Path(arguments.query_fasta).resolve()),
+        "query_fasta_sha256": file_sha256(arguments.query_fasta),
+        "reference_package_path": str(package.manifest_path) if package.manifest_path else None,
+        "classical_tree_path": str(package.classical.tree_path),
+        "classical_reference_alignment_path": str(package.classical.alignment_path),
+        "cryptic_tree_path": str(package.cryptic.tree_path),
+        "cryptic_reference_alignment_path": str(package.cryptic.alignment_path),
+        "minimum_distance_separation": minimum_distance_separation,
+        "selection_method": "nearest_reference_normalized_hamming_distance",
+        "warning": "Distance-separation thresholds require empirical calibration for each pair of panels.",
+    }
+    write_panel_selection_outputs(output, decisions, selection_metadata)
     write_selected_panel_trees(output, classical, cryptic, decisions)
+    write_auto_report(output, decisions, selection_metadata)
     (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
     logger.event(1, "complete", "Automatic panel placement completed", **selection_summary)
     append_final_event(output, logger.events[-1])
