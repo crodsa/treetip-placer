@@ -7,11 +7,11 @@ from typing import Mapping
 
 
 @dataclass(frozen=True)
-class Profile:
-    """An ordered, categorical MLST allele profile."""
+class AlignedSequence:
+    """A sequence represented in an immutable, fixed-column coordinate system."""
 
     sample_id: str
-    alleles: tuple[str | None, ...]
+    characters: tuple[str | None, ...]
 
 
 @dataclass(frozen=True)
@@ -30,8 +30,8 @@ class QueryQc:
     sample_id: str
     status: str
     coverage: float
-    observed_loci: int
-    comparable_loci: int
+    observed_sites: int
+    comparable_sites: int
     nearest_reference: str | None
     nearest_distance: float | None
     findings: list[QcFinding] = field(default_factory=list)
@@ -48,7 +48,7 @@ class PlacementConfig:
     bootstrap_seed: int = 1
     min_coverage: float = 0.70
     warn_coverage: float = 0.90
-    min_comparable_loci: int = 3
+    min_comparable_sites: int = 3
     outlier_distance: float = 0.50
     unresolved_weight: float = 0.60
     terminal_outlier_multiplier: float = 3.0
@@ -90,9 +90,9 @@ class RunMetadata:
 
     version: str
     tree_path: str
-    reference_profiles_path: str
-    query_profiles_path: str
+    reference_alignment_path: str
+    query_alignment_path: str
     tree_sha256: str
-    reference_profiles_sha256: str
-    query_profiles_sha256: str
+    reference_alignment_sha256: str
+    query_alignment_sha256: str
     config: Mapping[str, object]

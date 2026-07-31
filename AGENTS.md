@@ -8,14 +8,14 @@ Write all source code, identifiers, comments, docstrings, CLI output, logs, sche
 
 The repository develops a quality-controlled fixed-backbone placement tool. Do not describe a placement result as equivalent to a full de novo phylogenetic inference. Preserve the reference coordinate system, reference topology, masking, model metadata, and provenance.
 
-The current backend uses categorical-distance weighted least squares for MLST profiles and fixed-column alignments. Keep likelihood placement, SNP ascertainment handling, and conditional local topology refinement clearly separated as future work until implemented and validated.
+The current backend uses categorical-distance weighted least squares for fixed-column FASTA alignments. Keep likelihood placement, SNP ascertainment handling, and conditional local topology refinement clearly separated as future work until implemented and validated.
 
 ## Input and output contract
 
-- Treat MLST allele IDs as categorical values, never as numeric distances.
+- Treat each FASTA column as an immutable reference coordinate; do not silently realign, trim, or pad inputs.
 - Do not silently drop invalid or incomplete queries; report `PASS`, `WARN`, `FAIL`, or `UNRESOLVED` with explicit reasons.
 - Keep drawing-oriented Newick free of overloaded confidence labels. Store uncertainty and QC in sidecar tables and JSON.
-- Do not add real genomic or MLST data to version control unless redistribution permission is explicit.
+- Do not add real genomic or alignment data to version control unless redistribution permission is explicit.
 
 ## Verification
 

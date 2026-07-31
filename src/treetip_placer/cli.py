@@ -15,48 +15,32 @@ from typing import Sequence
 
 from . import __version__
 from .alignment import read_fasta_alignment, require_matching_alignment_widths
-from .models import PlacementConfig, Profile, RunMetadata
+from .models import AlignedSequence, PlacementConfig, RunMetadata
 from .outputs import write_run_outputs
 from .placement import place_query
-from .profiles import (
-    ProfileTable,
-    project_queries_to_reference,
-    read_profile_table,
-    require_reference_profiles_complete,
-)
 from .tree import Tree
-from .validation import (
-    run_parallel_validation,
-    run_serial_validation,
-    select_holdout_ids,
-    summarize_validation,
-    write_validation_outputs,
-)
 
 
 _WORKER_TREE: Tree | None = None
-_WORKER_REFERENCES: tuple[Profile, ...] = ()
+_WORKER_REFERENCES: tuple[AlignedSequence, ...] = ()
 _WORKER_CONFIG: PlacementConfig | None = None
-_WORKER_MISSING_LOCI: tuple[str, ...] = ()
 
 
 def worker_initialize(
     newick: str,
-    references: tuple[Profile, ...],
+    references: tuple[AlignedSequence, ...],
     config: PlacementConfig,
-    missing_loci: tuple[str, ...],
     max_cache_megabytes: int,
 ) -> None:
     """Create isolated worker state so caches do not need to be pickled per query."""
 
-    global _WORKER_TREE, _WORKER_REFERENCES, _WORKER_CONFIG, _WORKER_MISSING_LOCI
+    global _WORKER_TREE, _WORKER_REFERENCES, _WORKER_CONFIG
     _WORKER_TREE = Tree.from_newick(newick, max_cache_megabytes)
     _WORKER_REFERENCES = references
     _WORKER_CONFIG = config
-    _WORKER_MISSING_LOCI = missing_loci
 
 
-def worker_place(query: Profile):
+def worker_place(query: AlignedSequence):
     """Place a single query in a process worker."""
 
     if _WORKER_TREE is None or _WORKER_CONFIG is None:
@@ -66,7 +50,6 @@ def worker_place(query: Profile):
         _WORKER_REFERENCES,
         _WORKER_TREE,
         _WORKER_CONFIG,
-        missing_reference_loci=_WORKER_MISSING_LOCI,
     )
 
 
@@ -98,23 +81,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="treetip",
-        description="Quality-controlled fixed-tree placement for MLST profiles and aligned characters.",
+        description="Quality-controlled fixed-tree placement for immutable aligned sequences.",
     )
     parser.add_argument("--version", action="version", version=__version__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     place = subparsers.add_parser(
-        "place", help="Place query profiles or aligned sequences on a fixed reference tree."
+        "place", help="Place aligned query sequences on a fixed reference tree."
     )
     place.add_argument("--tree", required=True, help="Reference branch-length Newick tree.")
-    input_group = place.add_argument_group("input adapters")
-    input_group.add_argument(
-        "--reference-profiles", help="Reference MLST allele-profile TSV file."
+    place.add_argument(
+        "--reference-alignment", required=True, help="Reference fixed-column FASTA alignment."
     )
-    input_group.add_argument("--query-profiles", help="Query MLST allele-profile TSV file.")
-    input_group.add_argument(
-        "--reference-alignment", help="Reference fixed-column FASTA alignment."
-    )
-    input_group.add_argument("--query-alignment", help="Query fixed-column FASTA alignment.")
+    place.add_argument("--query-alignment", required=True, help="Query fixed-column FASTA alignment.")
     place.add_argument("--output", required=True, help="New, empty output directory.")
     place.add_argument(
         "--preset",
@@ -131,14 +109,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--bootstrap",
         type=nonnegative_integer,
         default=0,
-        help="Locus/site bootstrap replicates per successfully placed query.",
+        help="Alignment-site bootstrap replicates per successfully placed query.",
     )
     place.add_argument("--seed", type=int, default=1, help="Bootstrap random seed.")
     place.add_argument("--candidate-count", type=positive_integer, default=16)
     place.add_argument("--candidate-hops", type=positive_integer, default=4)
     place.add_argument("--min-coverage", type=probability, default=0.70)
     place.add_argument("--warn-coverage", type=probability, default=0.90)
-    place.add_argument("--min-comparable-loci", type=positive_integer, default=3)
+    place.add_argument("--min-comparable-sites", type=positive_integer, default=100)
     place.add_argument("--outlier-distance", type=probability, default=0.50)
     place.add_argument("--unresolved-weight", type=probability, default=0.60)
     place.add_argument(
@@ -159,57 +137,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Increase stderr progress detail; repeat for more detail.",
     )
-    validate = subparsers.add_parser(
-        "validate-mlst",
-        help="Run pruned leave-one-out validation for an MLST reference panel.",
-    )
-    validate.add_argument("--tree", required=True, help="Reference branch-length Newick tree.")
-    validate.add_argument(
-        "--reference-profiles", required=True, help="Reference MLST allele-profile TSV file."
-    )
-    validate.add_argument("--output", required=True, help="New, empty validation output directory.")
-    validate.add_argument(
-        "--max-holdouts",
-        type=nonnegative_integer,
-        default=0,
-        help="Maximum profiles to hold out; 0 validates every reference profile.",
-    )
-    validate.add_argument(
-        "--preset",
-        choices=("fast", "balanced", "thorough"),
-        default="balanced",
-        help="Search scope for each held-out placement.",
-    )
-    validate.add_argument(
-        "--threads", default="auto", help="Parallel holdout workers; use 'auto' or a positive integer."
-    )
-    validate.add_argument(
-        "--bootstrap",
-        type=nonnegative_integer,
-        default=0,
-        help="Locus bootstrap replicates per held-out profile.",
-    )
-    validate.add_argument("--seed", type=int, default=1, help="Sampling and bootstrap random seed.")
-    validate.add_argument("--candidate-count", type=positive_integer, default=16)
-    validate.add_argument("--candidate-hops", type=positive_integer, default=4)
-    validate.add_argument("--min-coverage", type=probability, default=0.70)
-    validate.add_argument("--warn-coverage", type=probability, default=0.90)
-    validate.add_argument("--min-comparable-loci", type=positive_integer, default=3)
-    validate.add_argument("--outlier-distance", type=probability, default=0.50)
-    validate.add_argument("--unresolved-weight", type=probability, default=0.60)
-    validate.add_argument(
-        "--max-cache-megabytes",
-        type=positive_integer,
-        default=256,
-        help="Per-process limit for cached node-to-tip distance rows.",
-    )
-    validate.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        help="Increase stderr progress detail; repeat for more detail.",
-    )
     return parser
 
 
@@ -221,8 +148,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if arguments.command == "place":
             return run_place(arguments)
-        if arguments.command == "validate-mlst":
-            return run_validate_mlst(arguments)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
@@ -242,20 +167,23 @@ def run_place(arguments: argparse.Namespace) -> int:
     if len(tree.tips) < 2:
         raise ValueError("Reference tree must contain at least two tips")
 
-    references, queries, input_kind, absent_loci = load_input_adapter(arguments)
-    reference_by_id = references.by_id
+    reference_alignment = read_fasta_alignment(arguments.reference_alignment)
+    query_alignment = read_fasta_alignment(arguments.query_alignment)
+    require_matching_alignment_widths(reference_alignment, query_alignment)
+    reference_by_id = {sequence.sample_id: sequence for sequence in reference_alignment.sequences}
     tree_tip_names = set(tree.tip_index)
     reference_names = set(reference_by_id)
     if tree_tip_names != reference_names:
-        missing_in_profiles = sorted(tree_tip_names - reference_names)
+        missing_in_alignment = sorted(tree_tip_names - reference_names)
         missing_in_tree = sorted(reference_names - tree_tip_names)
         details: list[str] = []
-        if missing_in_profiles:
-            details.append("tips absent from reference profiles: " + ", ".join(missing_in_profiles[:10]))
+        if missing_in_alignment:
+            details.append("tips absent from reference alignment: " + ", ".join(missing_in_alignment[:10]))
         if missing_in_tree:
-            details.append("profile IDs absent from tree: " + ", ".join(missing_in_tree[:10]))
+            details.append("alignment IDs absent from tree: " + ", ".join(missing_in_tree[:10]))
         raise ValueError("Reference tree and data IDs differ; " + "; ".join(details))
-    query_names = {profile.sample_id for profile in queries}
+    queries = query_alignment.sequences
+    query_names = {sequence.sample_id for sequence in queries}
     overlap = sorted(query_names & reference_names)
     if overlap:
         raise ValueError(
@@ -273,7 +201,7 @@ def run_place(arguments: argparse.Namespace) -> int:
         bootstrap_seed=arguments.seed,
         min_coverage=arguments.min_coverage,
         warn_coverage=arguments.warn_coverage,
-        min_comparable_loci=arguments.min_comparable_loci,
+        min_comparable_sites=arguments.min_comparable_sites,
         outlier_distance=arguments.outlier_distance,
         unresolved_weight=arguments.unresolved_weight,
         force=arguments.force,
@@ -282,10 +210,10 @@ def run_place(arguments: argparse.Namespace) -> int:
         1,
         "input",
         "Validated reference inputs",
-        input_kind=input_kind,
+        input_kind="fixed_column_fasta_alignment",
         reference_tips=len(references_in_tip_order),
         queries=len(queries),
-        characters=len(references_in_tip_order[0].alleles),
+        characters=len(references_in_tip_order[0].characters),
     )
 
     workers = resolve_threads(arguments.threads, len(queries))
@@ -293,7 +221,7 @@ def run_place(arguments: argparse.Namespace) -> int:
     started_placement = time.perf_counter()
     if workers == 1:
         results = run_serial_placements(
-            queries, references_in_tip_order, tree, config, absent_loci, logger, started_placement
+            queries, references_in_tip_order, tree, config, logger, started_placement
         )
     else:
         try:
@@ -302,7 +230,6 @@ def run_place(arguments: argparse.Namespace) -> int:
                 tree.newick(),
                 references_in_tip_order,
                 config,
-                absent_loci,
                 arguments.max_cache_megabytes,
                 workers,
                 logger,
@@ -317,7 +244,7 @@ def run_place(arguments: argparse.Namespace) -> int:
             )
             workers = 1
             results = run_serial_placements(
-                queries, references_in_tip_order, tree, config, absent_loci, logger, started_placement
+                queries, references_in_tip_order, tree, config, logger, started_placement
             )
 
     summary = summarize_results(results)
@@ -325,16 +252,12 @@ def run_place(arguments: argparse.Namespace) -> int:
     metadata = RunMetadata(
         version=__version__,
         tree_path=str(Path(arguments.tree).resolve()),
-        reference_profiles_path=str(
-            Path(arguments.reference_profiles or arguments.reference_alignment).resolve()
-        ),
-        query_profiles_path=str(Path(arguments.query_profiles or arguments.query_alignment).resolve()),
+        reference_alignment_path=str(Path(arguments.reference_alignment).resolve()),
+        query_alignment_path=str(Path(arguments.query_alignment).resolve()),
         tree_sha256=file_sha256(arguments.tree),
-        reference_profiles_sha256=file_sha256(
-            arguments.reference_profiles or arguments.reference_alignment
-        ),
-        query_profiles_sha256=file_sha256(arguments.query_profiles or arguments.query_alignment),
-        config={**asdict(config), "input_kind": input_kind, "workers": workers},
+        reference_alignment_sha256=file_sha256(arguments.reference_alignment),
+        query_alignment_sha256=file_sha256(arguments.query_alignment),
+        config={**asdict(config), "input_kind": "fixed_column_fasta_alignment", "workers": workers},
     )
     logger.event(1, "output", "Writing interoperable outputs", directory=str(output))
     write_run_outputs(output, tree, results, metadata, logger.events)
@@ -494,11 +417,10 @@ def load_input_adapter(
 
 
 def run_parallel_placements(
-    queries: Sequence[Profile],
+    queries: Sequence[AlignedSequence],
     tree_newick: str,
-    references: tuple[Profile, ...],
+    references: tuple[AlignedSequence, ...],
     config: PlacementConfig,
-    absent_loci: tuple[str, ...],
     max_cache_megabytes: int,
     workers: int,
     logger: EventLogger,
@@ -510,7 +432,7 @@ def run_parallel_placements(
     with ProcessPoolExecutor(
         max_workers=workers,
         initializer=worker_initialize,
-        initargs=(tree_newick, references, config, absent_loci, max_cache_megabytes),
+        initargs=(tree_newick, references, config, max_cache_megabytes),
     ) as executor:
         futures = {
             executor.submit(worker_place, query): index for index, query in enumerate(queries)
@@ -525,11 +447,10 @@ def run_parallel_placements(
 
 
 def run_serial_placements(
-    queries: Sequence[Profile],
-    references: tuple[Profile, ...],
+    queries: Sequence[AlignedSequence],
+    references: tuple[AlignedSequence, ...],
     tree: Tree,
     config: PlacementConfig,
-    absent_loci: tuple[str, ...],
     logger: EventLogger,
     started_at: float,
 ):
@@ -543,7 +464,6 @@ def run_serial_placements(
                 references,
                 tree,
                 config,
-                missing_reference_loci=absent_loci,
             )
         )
         log_progress(logger, position, len(queries), started_at)

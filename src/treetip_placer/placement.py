@@ -9,29 +9,26 @@ from dataclasses import replace
 from statistics import median
 from typing import Iterable, Sequence
 
-from .models import EdgeFit, PlacementConfig, PlacementResult, Profile, QcFinding
-from .profiles import evaluate_query_qc, profile_distance
+from .models import AlignedSequence, EdgeFit, PlacementConfig, PlacementResult, QcFinding
+from .sequence import character_distance, evaluate_sequence_qc
 from .tree import Edge, Tree
 
 
 def place_query(
-    query: Profile,
-    reference_profiles_in_tip_order: Sequence[Profile],
+    query: AlignedSequence,
+    references_in_tip_order: Sequence[AlignedSequence],
     tree: Tree,
     config: PlacementConfig,
-    *,
-    missing_reference_loci: Sequence[str] = (),
 ) -> PlacementResult:
     """Place one query on a fixed tree and report pre- and post-placement quality."""
 
-    qc = evaluate_query_qc(
+    qc = evaluate_sequence_qc(
         query,
-        reference_profiles_in_tip_order,
+        references_in_tip_order,
         min_coverage=config.min_coverage,
         warn_coverage=config.warn_coverage,
-        min_comparable_loci=config.min_comparable_loci,
+        min_comparable_sites=config.min_comparable_sites,
         outlier_distance=config.outlier_distance,
-        missing_reference_loci=missing_reference_loci,
     )
     if qc.status == "FAIL" and not config.force:
         return PlacementResult(
@@ -41,9 +38,9 @@ def place_query(
             note="Pre-placement QC failed; use --force only after reviewing the findings.",
         )
 
-    observed = distance_vector(query, reference_profiles_in_tip_order)
+    observed = distance_vector(query, references_in_tip_order)
     candidates, scope = choose_candidate_edges(
-        observed, reference_profiles_in_tip_order, tree, config
+        observed, references_in_tip_order, tree, config
     )
     if not candidates:
         qc.findings.append(
@@ -66,7 +63,7 @@ def place_query(
             QcFinding(
                 code="NO_SCORABLE_EDGES",
                 severity="error",
-                message="No candidate edge could be scored from the available loci.",
+                message="No candidate edge could be scored from the available alignment sites.",
             )
         )
         return PlacementResult(
@@ -84,7 +81,7 @@ def place_query(
     if config.bootstrap_replicates:
         bootstrap_support = bootstrap_edge_support(
             query,
-            reference_profiles_in_tip_order,
+            references_in_tip_order,
             tree,
             candidates,
             best.edge_id,
@@ -145,18 +142,18 @@ def place_query(
 
 
 def distance_vector(
-    query: Profile,
-    references: Sequence[Profile],
-    locus_indices: Iterable[int] | None = None,
+    query: AlignedSequence,
+    references: Sequence[AlignedSequence],
+    site_indices: Iterable[int] | None = None,
 ) -> list[float | None]:
     """Compute query-to-reference categorical distances in tree-tip order."""
 
-    return [profile_distance(query, reference, locus_indices)[0] for reference in references]
+    return [character_distance(query, reference, site_indices)[0] for reference in references]
 
 
 def choose_candidate_edges(
     observed: Sequence[float | None],
-    references: Sequence[Profile],
+    references: Sequence[AlignedSequence],
     tree: Tree,
     config: PlacementConfig,
 ) -> tuple[list[Edge], str]:
@@ -332,26 +329,26 @@ def relative_fit_weights(fits: Sequence[EdgeFit]) -> list[EdgeFit]:
 
 
 def bootstrap_edge_support(
-    query: Profile,
-    references: Sequence[Profile],
+    query: AlignedSequence,
+    references: Sequence[AlignedSequence],
     tree: Tree,
     candidates: Sequence[Edge],
     expected_best_edge_id: int,
     config: PlacementConfig,
 ) -> float:
-    """Estimate fixed-candidate edge stability by resampling loci with replacement."""
+    """Estimate fixed-candidate edge stability by resampling sites with replacement."""
 
     stable_seed = int.from_bytes(
         hashlib.sha256(f"{config.bootstrap_seed}:{query.sample_id}".encode("utf-8")).digest()[:8],
         "big",
     )
     generator = random.Random(stable_seed)
-    loci_count = len(query.alleles)
+    site_count = len(query.characters)
     successful = 0
     matching = 0
     for _ in range(config.bootstrap_replicates):
-        sampled_loci = [generator.randrange(loci_count) for _ in range(loci_count)]
-        sampled_observed = distance_vector(query, references, sampled_loci)
+        sampled_sites = [generator.randrange(site_count) for _ in range(site_count)]
+        sampled_observed = distance_vector(query, references, sampled_sites)
         fits = score_edges(tree, candidates, sampled_observed)
         if not fits:
             continue

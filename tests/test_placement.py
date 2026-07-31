@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from treetip_placer.alignment import read_fasta_alignment, require_matching_alignment_widths
-from treetip_placer.models import PlacementConfig, Profile
+from treetip_placer.models import AlignedSequence, PlacementConfig
 from treetip_placer.outputs import render_placed_tree
 from treetip_placer.placement import place_query
 from treetip_placer.tree import Tree
@@ -18,19 +18,19 @@ class PlacementTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tree = Tree.from_newick("(A:0.5,B:0,C:0.5);")
         self.references = (
-            Profile("A", ("1", "1", "1", "1", "1", "1", "1", "1")),
-            Profile("B", ("1", "1", "1", "1", "2", "2", "2", "2")),
-            Profile("C", ("2", "2", "2", "2", "2", "2", "2", "2")),
+            AlignedSequence("A", tuple("AAAACCCC")),
+            AlignedSequence("B", tuple("AAAAGGGG")),
+            AlignedSequence("C", tuple("CCCCGGGG")),
         )
         self.config = PlacementConfig(
             preset="thorough",
             min_coverage=0.5,
-            min_comparable_loci=2,
+            min_comparable_sites=2,
             unresolved_weight=0.0,
         )
 
-    def test_exact_profile_joins_its_reference_terminal_edge(self) -> None:
-        result = place_query(Profile("query_A", self.references[0].alleles), self.references, self.tree, self.config)
+    def test_exact_sequence_joins_its_reference_terminal_edge(self) -> None:
+        result = place_query(AlignedSequence("query_A", self.references[0].characters), self.references, self.tree, self.config)
 
         self.assertEqual(result.final_status, "PASS")
         self.assertIsNotNone(result.best_fit)
@@ -40,9 +40,9 @@ class PlacementTests(unittest.TestCase):
         self.assertAlmostEqual(result.best_fit.pendant_length, 0.0)
         self.assertAlmostEqual(result.best_fit.objective, 0.0)
 
-    def test_missing_profile_fails_preplacement_qc(self) -> None:
+    def test_missing_sequence_fails_preplacement_qc(self) -> None:
         result = place_query(
-            Profile("empty", (None,) * 8), self.references, self.tree, self.config
+            AlignedSequence("empty", (None,) * 8), self.references, self.tree, self.config
         )
 
         self.assertEqual(result.final_status, "FAIL")
@@ -50,7 +50,7 @@ class PlacementTests(unittest.TestCase):
         self.assertTrue(any(finding.code == "LOW_COVERAGE" for finding in result.qc.findings))
 
     def test_rendered_tree_is_parseable_and_contains_query(self) -> None:
-        result = place_query(Profile("query_A", self.references[0].alleles), self.references, self.tree, self.config)
+        result = place_query(AlignedSequence("query_A", self.references[0].characters), self.references, self.tree, self.config)
         rendered = render_placed_tree(self.tree, [result])
 
         reparsed = Tree.from_newick(rendered)
@@ -63,7 +63,7 @@ class PlacementTests(unittest.TestCase):
         query = read_fasta_alignment(fixtures / "query_alignment.fasta")
         require_matching_alignment_widths(reference, query)
         self.assertEqual(reference.site_count, 4)
-        self.assertEqual(query.profiles[0].alleles, ("A", "C", "G", "T"))
+        self.assertEqual(query.sequences[0].characters, ("A", "C", "G", "T"))
 
     def test_pruning_records_the_original_tip_attachment(self) -> None:
         tree = Tree.from_newick("((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);")

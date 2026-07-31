@@ -5,8 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .models import Profile
-from .profiles import normalise_allele
+from .models import AlignedSequence
 
 
 SEQUENCE_MISSING = frozenset({"-", ".", "?", "N", "X"})
@@ -14,9 +13,9 @@ SEQUENCE_MISSING = frozenset({"-", ".", "?", "N", "X"})
 
 @dataclass(frozen=True)
 class AlignmentTable:
-    """An aligned character matrix represented through the generic profile engine."""
+    """An immutable fixed-column nucleotide alignment."""
 
-    profiles: tuple[Profile, ...]
+    sequences: tuple[AlignedSequence, ...]
     site_count: int
 
 
@@ -68,17 +67,17 @@ def read_fasta_alignment(path: str | Path) -> AlignmentTable:
             f"FASTA input is not a fixed-column alignment; observed lengths: {sorted(lengths)}"
         )
     site_count = lengths.pop()
-    profiles = tuple(
-        Profile(
+    sequences = tuple(
+        AlignedSequence(
             sample_id=name,
-            alleles=tuple(
-                None if character in SEQUENCE_MISSING else normalise_allele(character)
+            characters=tuple(
+                None if character in SEQUENCE_MISSING else character
                 for character in sequence
             ),
         )
         for name, sequence in records
     )
-    return AlignmentTable(profiles=profiles, site_count=site_count)
+    return AlignmentTable(sequences=sequences, site_count=site_count)
 
 
 def require_matching_alignment_widths(

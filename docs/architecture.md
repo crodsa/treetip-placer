@@ -2,44 +2,24 @@
 
 ## Design principle
 
-TreeTip Placer treats a reference tree as an immutable backbone. A query is projected onto the reference feature space, screened by quality-control gates, scored on candidate edges, and reported with explicit uncertainty. The program does not imply that a fixed-backbone result is identical to a full de novo tree reconstruction.
+TreeTip Placer treats a branch-length reference tree and its fixed-column FASTA alignment as an immutable package. Query sequences must already be mapped to the same columns; the tool does not perform an alignment during placement.
 
-## Input adapters
+## Current engine
 
-`mlst_allele_profiles` reads tab-separated categorical allele calls. It uses normalized allelic Hamming distances and reports missing or composite calls.
+The FASTA adapter represents callable nucleotide columns as an ordered sequence. For every query, the engine computes pairwise normalized Hamming distances to reference tips and scores candidate insertion edges by constrained least squares. `fast` and `balanced` search a neighbourhood around nearest references; `thorough` scores every edge.
 
-`fixed_column_fasta_alignment` reads aligned FASTA records. Each fixed column is a categorical character. It is appropriate for concatenated MLST alleles, core SNP alignments, and concatenated core genes only when queries are already in the exact reference coordinate system.
+The QC gate reports coverage, comparable sites, ambiguous bases, panel distance, diffuse placements, and long terminal branches. Query placements run independently in process workers, with a recorded serial fallback when workers are unavailable. Bootstrap resampling occurs inside each worker to avoid nested parallelism.
 
-Both adapters produce an ordered character profile consumed by the same placement engine. This isolates format-specific validation from placement mathematics.
+## Reference packages
 
-## Current placement engine
+A reference package must preserve the original alignment, tree, sample-ID mapping, filtering/masking rules, sequence partitions when available, software versions, and checksums. A cryptic-only package and a mixed cryptic–classical package require separate calibration because their distance distributions differ.
 
-For every query, the engine obtains distances to reference tips and scores an insertion on a branch by constrained weighted least squares. It estimates the attachment position along the edge and a non-negative pendant length. The `fast` and `balanced` presets use a neighbourhood around the nearest reference profiles; `thorough` evaluates every edge.
+## Planned work
 
-The reported `relative_fit_weight` is a heuristic normalization of distance-objective differences. It is not a likelihood weight ratio and is labelled accordingly in every output.
+1. Maximum-likelihood placement for aligned nucleotide data with explicit substitution model, partitions, and SNP ascertainment metadata.
+2. Alignment leave-one-out validation and calibration reports.
+3. Conditional local topology refinement with support recomputation only in the affected region.
 
-Bootstrap resampling is available over categorical loci or alignment columns. It measures stability among the original candidate edges; it is not a replacement for a whole-tree bootstrap.
+## Outputs
 
-## Planned backends
-
-1. Maximum-likelihood placement adapter for aligned nucleotide or amino-acid data, preserving model parameters, partitions, and SNP ascertainment metadata from the reference analysis.
-2. Mutation-annotated parsimony adapter for exceptionally large, low-divergence genome panels.
-3. Conditional local refinement: extract the uncertain local region, keep the exterior fixed through boundary likelihood information, optimize local NNI/SPR alternatives, and report newly computed support only for affected branches.
-
-## Parallel execution
-
-Queries are independent against a reference snapshot and are distributed across process workers. A worker creates its own reference cache, so the requested worker count must respect available memory. The command falls back to serial execution if the host forbids process workers and records that decision in `events.jsonl` and `run.log`.
-
-Bootstrap is intentionally performed inside each query worker. This avoids nested parallelism and oversubscription when many queries are supplied.
-
-## Validation engine
-
-The MLST validation command implements pruned leave-one-out evaluation. It removes each held-out reference tip from a copied backbone before scoring the corresponding profile, so its original terminal edge cannot leak into candidate selection. Pruning preserves path lengths when a unary node is suppressed. The engine records whether the selected edge recovers the known attachment neighbourhood and the graph-edge distance otherwise.
-
-Held-out placements are independent and can use the same process-worker strategy as ordinary query placement. This enables fixed-seed subsets for large panels while keeping result order deterministic.
-
-## Output contract
-
-`placed_tree.nwk` is a simple drawing-oriented tree. `placed_tree.nexus` offers the same topology in Nexus form. `placements.tsv` is the authoritative tabular result, `alternative_edges.tsv` holds ambiguity information, and `query_qc.tsv` describes all gate findings. `run_manifest.json` and `events.jsonl` make a run reproducible.
-
-The optional JPlace-shaped JSON document is explicitly marked experimental for the distance backend because its objective is not a maximum-likelihood score.
+Newick and Nexus are drawing-oriented outputs. TSV and JSON sidecars contain QC and uncertainty. The experimental JPlace-shaped output is distance-based and must not be interpreted as maximum-likelihood JPlace.

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "treetip-placer"
 version = "0.1.0"
-description = "Quality-controlled placement of MLST profiles on a fixed reference tree."
+description = "Quality-controlled placement of fixed-column FASTA alignments on a reference tree."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "License selection pending before public release"}
