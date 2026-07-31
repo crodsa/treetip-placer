@@ -128,7 +128,7 @@ def build_parser() -> argparse.ArgumentParser:
     auto.add_argument(
         "--min-panel-distance-separation",
         type=nonnegative_float,
-        default=0.005,
+        default=0.01,
         help="Minimum nearest-reference distance advantage required for a panel assignment.",
     )
     auto.add_argument("--output", required=True, help="New, empty output directory.")
@@ -155,7 +155,7 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument(
         "--min-panel-distance-separation",
         type=nonnegative_float,
-        default=0.005,
+        default=0.01,
         help="Distance margin evaluated as the default decision threshold.",
     )
     calibrate.add_argument("--output", required=True, help="New, empty output directory.")

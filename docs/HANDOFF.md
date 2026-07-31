@@ -33,11 +33,11 @@ A local, non-versioned 135-sequence cryptic reference alignment and IQ-TREE 3 in
 
 ## Automatic-panel stress test
 
-The local run at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\auto_panel_stress_test_20260731` confirmed two known cryptic queries as `CRYPTIC` and one known clade-4 classical control as `CLASSICAL`. The provisional default distance margin is `0.005`; it requires broader labelled calibration before a scientific release.
+The original cryptic reference panel contained a user-curated classical control. A derived local `cryptic_strict` package was created by pruning that tip without modifying the original data. The remaining six user-curated classical controls were not present in this source alignment and require their exact source panel or identifiers before they can be excluded.
 
-A local 80-control leave-one-unique-sequence-out gate calibration is available at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\panel_gate_calibration_command_fixed_20260731`. At margin `0.005`, 58/80 controls received a panel call, all 58 were correct, and 22 were retained as ambiguous; at margin `0`, one control was misclassified. The reproducible `calibrate-panel-gate` command now produces this report. This validates conservative gating on these internal panels only, not external generalization or placement-topology accuracy.
+The local stress test at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\auto_panel_strict_stress_test_20260731` confirmed two known cryptic queries as `CRYPTIC` and one known clade-4 classical control as `CLASSICAL` against the strict package.
 
-The expanded 196-control local run at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\panel_gate_calibration_98_per_panel_20260731` found one high-confidence label conflict at margin `0.005`. The command now writes `panel_label_conflicts.tsv` to surface such cases for provenance review without changing labels or panel membership.
+The expanded leave-one-unique-sequence-out calibration at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\panel_gate_calibration_strict_20260731` supports a distance margin of `0.01` for this exact classical/strict-cryptic pair: 194/195 controls were called correctly and one was retained as ambiguous. This validates conservative gating on these internal panels only, not external generalization or placement-topology accuracy.
 
 ## Next milestones
 
