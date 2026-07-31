@@ -508,7 +508,7 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
     decisions = choose_reference_panel(
         classical_results, cryptic_results, arguments.min_panel_distance_separation
     )
-    write_calibration_records(output, decisions, truth_by_id, source_id_by_id)
+    conflict_count = write_calibration_records(output, decisions, truth_by_id, source_id_by_id)
     sweep = panel_threshold_sweep(
         classical_results,
         cryptic_results,
@@ -522,6 +522,7 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
         "classical_controls": len(classical_controls),
         "cryptic_controls": len(cryptic_controls),
         "default_threshold": arguments.min_panel_distance_separation,
+        "flagged_panel_label_conflicts": conflict_count,
         "default_result": next(
             row for row in sweep if row["threshold"] == arguments.min_panel_distance_separation
         ),
@@ -634,25 +635,30 @@ def write_calibration_records(
     decisions: Sequence[object],
     truth_by_id: dict[str, str],
     source_id_by_id: dict[str, str],
-) -> None:
+) -> int:
     """Write one auditable calibration record per held-out panel control."""
 
     fields = [
         "calibration_id", "source_sample_id", "truth", "assignment", "decision_status",
-        "correct", "classical_nearest_distance", "cryptic_nearest_distance", "distance_margin",
+        "outcome", "classical_nearest_distance", "cryptic_nearest_distance", "distance_margin",
     ]
+    conflicts: list[dict[str, object]] = []
     with (output_directory / "calibration_records.tsv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         for decision in decisions:
             sample_id = getattr(decision, "sample_id")
-            row = {
+            assignment = getattr(decision, "assignment")
+            truth = truth_by_id[sample_id]
+            called = assignment in {"CLASSICAL", "CRYPTIC"}
+            outcome = "CORRECT_CALL" if assignment == truth else "INCORRECT_CALL" if called else "AMBIGUOUS_OR_UNRESOLVED"
+            row: dict[str, object] = {
                 "calibration_id": sample_id,
                 "source_sample_id": source_id_by_id[sample_id],
-                "truth": truth_by_id[sample_id],
-                "assignment": getattr(decision, "assignment"),
+                "truth": truth,
+                "assignment": assignment,
                 "decision_status": getattr(decision, "decision_status"),
-                "correct": getattr(decision, "assignment") == truth_by_id[sample_id],
+                "outcome": outcome,
                 "classical_nearest_distance": getattr(decision, "classical_nearest_distance"),
                 "cryptic_nearest_distance": getattr(decision, "cryptic_nearest_distance"),
                 "distance_margin": getattr(decision, "distance_margin"),
@@ -660,6 +666,13 @@ def write_calibration_records(
             for field in ("classical_nearest_distance", "cryptic_nearest_distance", "distance_margin"):
                 row[field] = "" if row[field] is None else format(row[field], ".12g")
             writer.writerow(row)
+            if outcome == "INCORRECT_CALL":
+                conflicts.append(row)
+    with (output_directory / "panel_label_conflicts.tsv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(conflicts)
+    return len(conflicts)
 
 
 def map_queries_to_panel(

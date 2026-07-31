@@ -47,7 +47,7 @@ treetip calibrate-panel-gate \
   --verbose
 ```
 
-This writes `calibration_records.tsv` and `calibration_summary.json`, including a fixed threshold sweep. It evaluates the panel-assignment gate only; it does not estimate external generalization, tree-placement accuracy, or phylogenetic support.
+This writes `calibration_records.tsv`, `panel_label_conflicts.tsv`, and `calibration_summary.json`, including a fixed threshold sweep. The conflict table flags high-confidence calls that disagree with the control panel label for provenance review; it never changes source labels or reference membership. The command evaluates the panel-assignment gate only; it does not estimate external generalization, tree-placement accuracy, or phylogenetic support.
 
 ## Quick start
 
