@@ -8,7 +8,10 @@ import shutil
 import unittest
 from pathlib import Path
 
-from treetip_placer.reference_package import load_paired_reference_package
+from treetip_placer.reference_package import (
+    create_paired_reference_package,
+    load_paired_reference_package,
+)
 
 
 def digest(path: Path) -> str:
@@ -84,6 +87,41 @@ class ReferencePackageTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "checksum"):
                 load_paired_reference_package(manifest_path)
+        finally:
+            if root.exists():
+                shutil.rmtree(root)
+
+    def test_creator_writes_a_reloadable_manifest(self) -> None:
+        root = Path.cwd() / ".treetip-reference-package-test"
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir()
+        try:
+            classical_tree = root / "classical.nwk"
+            classical_alignment = root / "classical.fasta"
+            cryptic_tree = root / "cryptic.nwk"
+            cryptic_alignment = root / "cryptic.fasta"
+            for path, contents in (
+                (classical_tree, "(A:1,B:1);\n"),
+                (classical_alignment, ">A\nAAAA\n>B\nAAAT\n"),
+                (cryptic_tree, "(C:1,D:1);\n"),
+                (cryptic_alignment, ">C\nCCCC\n>D\nCCCT\n"),
+            ):
+                path.write_text(contents, encoding="utf-8")
+
+            package = create_paired_reference_package(
+                root / "paired_reference.json",
+                package_name="test-package",
+                classical_tree=classical_tree,
+                classical_alignment=classical_alignment,
+                cryptic_tree=cryptic_tree,
+                cryptic_alignment=cryptic_alignment,
+                minimum_distance_separation=0.01,
+            )
+
+            self.assertEqual(package.minimum_distance_separation, 0.01)
+            self.assertEqual(package.classical.tree_sha256, digest(classical_tree))
+            self.assertEqual(package.cryptic.alignment_sha256, digest(cryptic_alignment))
         finally:
             if root.exists():
                 shutil.rmtree(root)

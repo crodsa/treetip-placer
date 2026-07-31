@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,69 @@ def load_paired_reference_package(path: str | Path) -> PairedReferencePackage:
     validate_panel_checksums(classical, "classical")
     validate_panel_checksums(cryptic, "cryptic")
     return PairedReferencePackage(manifest_path, classical, cryptic, threshold)
+
+
+def create_paired_reference_package(
+    output_path: str | Path,
+    *,
+    package_name: str,
+    classical_tree: str | Path,
+    classical_alignment: str | Path,
+    cryptic_tree: str | Path,
+    cryptic_alignment: str | Path,
+    minimum_distance_separation: float,
+) -> PairedReferencePackage:
+    """Create a new manifest with portable paths when files share a drive."""
+
+    if minimum_distance_separation < 0.0:
+        raise ValueError("minimum_distance_separation must be non-negative")
+    manifest_path = Path(output_path).resolve()
+    if manifest_path.exists():
+        raise ValueError(f"Reference package output already exists: {manifest_path}")
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    classical = build_panel_reference(classical_tree, classical_alignment)
+    cryptic = build_panel_reference(cryptic_tree, cryptic_alignment)
+    document = {
+        "schema_version": 1,
+        "package_name": package_name,
+        "minimum_distance_separation": minimum_distance_separation,
+        "classical": serialize_panel_reference(classical, manifest_path.parent),
+        "cryptic": serialize_panel_reference(cryptic, manifest_path.parent),
+    }
+    manifest_path.write_text(json.dumps(document, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return load_paired_reference_package(manifest_path)
+
+
+def build_panel_reference(tree_path: str | Path, alignment_path: str | Path) -> PanelReference:
+    """Resolve existing artifacts and calculate their immutable checksums."""
+
+    tree = Path(tree_path).resolve()
+    alignment = Path(alignment_path).resolve()
+    if not tree.is_file():
+        raise ValueError(f"Reference tree does not exist: {tree}")
+    if not alignment.is_file():
+        raise ValueError(f"Reference alignment does not exist: {alignment}")
+    return PanelReference(tree, alignment, sha256(tree), sha256(alignment))
+
+
+def serialize_panel_reference(panel: PanelReference, manifest_directory: Path) -> dict[str, str]:
+    """Serialize one panel with relative paths when the platform permits it."""
+
+    return {
+        "tree": portable_path(panel.tree_path, manifest_directory),
+        "alignment": portable_path(panel.alignment_path, manifest_directory),
+        "tree_sha256": panel.tree_sha256 or sha256(panel.tree_path),
+        "alignment_sha256": panel.alignment_sha256 or sha256(panel.alignment_path),
+    }
+
+
+def portable_path(path: Path, manifest_directory: Path) -> str:
+    """Return a relative POSIX-style path, falling back to absolute across drives."""
+
+    try:
+        return Path(os.path.relpath(path, manifest_directory)).as_posix()
+    except ValueError:
+        return path.as_posix()
 
 
 def parse_panel_reference(

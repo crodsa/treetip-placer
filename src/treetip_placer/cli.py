@@ -26,7 +26,12 @@ from .models import AlignedSequence, PlacementConfig, PlacementResult, RunMetada
 from .outputs import render_placed_tree, write_run_outputs
 from .panel_selection import choose_reference_panel, write_panel_selection_outputs
 from .placement import place_query
-from .reference_package import PanelReference, PairedReferencePackage, load_paired_reference_package
+from .reference_package import (
+    PanelReference,
+    PairedReferencePackage,
+    create_paired_reference_package,
+    load_paired_reference_package,
+)
 from .sequence import evaluate_sequence_qc
 from .tree import Tree
 
@@ -168,6 +173,26 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument(
         "-v", "--verbose", action="count", default=0, help="Increase stderr progress detail; repeat for more detail."
     )
+
+    package = subparsers.add_parser(
+        "create-reference-package",
+        help="Create a checksummed portable paired classical/cryptic reference manifest.",
+    )
+    package.add_argument("--classical-tree", required=True, help="Classical reference branch-length Newick tree.")
+    package.add_argument("--classical-reference-alignment", required=True, help="Classical reference fixed-column FASTA alignment.")
+    package.add_argument("--cryptic-tree", required=True, help="Cryptic reference branch-length Newick tree.")
+    package.add_argument("--cryptic-reference-alignment", required=True, help="Cryptic reference fixed-column FASTA alignment.")
+    package.add_argument("--output", required=True, help="New paired reference package JSON path.")
+    package.add_argument("--name", help="Optional human-readable package name; defaults to the output filename stem.")
+    package.add_argument(
+        "--min-panel-distance-separation",
+        type=nonnegative_float,
+        default=0.01,
+        help="Calibrated minimum nearest-reference distance advantage for panel assignment.",
+    )
+    package.add_argument(
+        "-v", "--verbose", action="count", default=0, help="Increase stderr progress detail; repeat for more detail."
+    )
     return parser
 
 
@@ -231,6 +256,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_auto_place(arguments)
         if arguments.command == "calibrate-panel-gate":
             return run_calibrate_panel_gate(arguments)
+        if arguments.command == "create-reference-package":
+            return run_create_reference_package(arguments)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
@@ -343,6 +370,31 @@ def run_place(arguments: argparse.Namespace) -> int:
     )
     logger.event(1, "complete", "Run completed", **summary)
     append_final_event(output, logger.events[-1])
+    return 0
+
+
+def run_create_reference_package(arguments: argparse.Namespace) -> int:
+    """Create a portable paired-reference manifest without copying reference data."""
+
+    logger = EventLogger(arguments.verbose)
+    logger.event(1, "start", "Creating paired reference package", version=__version__)
+    output = Path(arguments.output)
+    package = create_paired_reference_package(
+        output,
+        package_name=arguments.name or output.stem,
+        classical_tree=arguments.classical_tree,
+        classical_alignment=arguments.classical_reference_alignment,
+        cryptic_tree=arguments.cryptic_tree,
+        cryptic_alignment=arguments.cryptic_reference_alignment,
+        minimum_distance_separation=arguments.min_panel_distance_separation,
+    )
+    logger.event(
+        1,
+        "complete",
+        "Created paired reference package",
+        output=str(package.manifest_path),
+        minimum_distance_separation=package.minimum_distance_separation,
+    )
     return 0
 
 

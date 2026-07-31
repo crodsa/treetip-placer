@@ -31,6 +31,18 @@ For routine use, provide one portable paired-reference manifest instead of four 
 }
 ```
 
+Create the manifest without hand-editing JSON:
+
+```bash
+treetip create-reference-package \
+  --classical-tree classical/tree.nwk \
+  --classical-reference-alignment classical/aligned.fasta \
+  --cryptic-tree cryptic/tree.nwk \
+  --cryptic-reference-alignment cryptic/aligned.fasta \
+  --min-panel-distance-separation 0.01 \
+  --output paired_reference.json
+```
+
 ```bash
 treetip place-auto \
   --reference-package paired_reference.json \
