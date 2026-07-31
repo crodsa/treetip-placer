@@ -126,6 +126,31 @@ class ReferencePackageTests(unittest.TestCase):
             if root.exists():
                 shutil.rmtree(root)
 
+    def test_rejects_tree_alignment_identifier_mismatch(self) -> None:
+        root = Path.cwd() / ".treetip-reference-package-test"
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir()
+        try:
+            tree = root / "tree.nwk"
+            alignment = root / "alignment.fasta"
+            tree.write_text("(A:1,B:1);\n", encoding="utf-8")
+            alignment.write_text(">A\nAAAA\n>C\nAAAT\n", encoding="utf-8")
+            manifest = {
+                "schema_version": 1,
+                "minimum_distance_separation": 0.01,
+                "classical": {"tree": tree.name, "alignment": alignment.name},
+                "cryptic": {"tree": tree.name, "alignment": alignment.name},
+            }
+            manifest_path = root / "paired_reference.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "IDs differ"):
+                load_paired_reference_package(manifest_path)
+        finally:
+            if root.exists():
+                shutil.rmtree(root)
+
 
 if __name__ == "__main__":
     unittest.main()

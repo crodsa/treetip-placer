@@ -41,6 +41,8 @@ The expanded leave-one-unique-sequence-out calibration at `C:\Users\crodriguez\D
 
 The portable paired manifest for this local production pair is `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\paired_reference_created_20260731.json`. It was produced by `create-reference-package`, uses relative paths and checksums, and was smoke-tested through `place-auto --reference-package`.
 
+`validate-reference-package` also passed for this manifest: the classical panel has 200 matching tree/alignment IDs across 3537 columns, and the cryptic panel has 134 matching IDs across 3501 columns.
+
 ## Next milestones
 
 1. Build a labelled classical/cryptic calibration set to estimate the automatic panel-selection threshold and boundary error rate.

@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .alignment import read_fasta_alignment
+from .tree import Tree
+
 
 @dataclass(frozen=True)
 class PanelReference:
@@ -50,7 +53,9 @@ def load_paired_reference_package(path: str | Path) -> PairedReferencePackage:
         raise ValueError("Reference package minimum_distance_separation must be non-negative")
     validate_panel_checksums(classical, "classical")
     validate_panel_checksums(cryptic, "cryptic")
-    return PairedReferencePackage(manifest_path, classical, cryptic, threshold)
+    package = PairedReferencePackage(manifest_path, classical, cryptic, threshold)
+    validate_paired_reference_package(package)
+    return package
 
 
 def create_paired_reference_package(
@@ -73,6 +78,8 @@ def create_paired_reference_package(
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     classical = build_panel_reference(classical_tree, classical_alignment)
     cryptic = build_panel_reference(cryptic_tree, cryptic_alignment)
+    validate_panel_structure(classical, "classical")
+    validate_panel_structure(cryptic, "cryptic")
     document = {
         "schema_version": 1,
         "package_name": package_name,
@@ -165,6 +172,36 @@ def validate_panel_checksums(panel: PanelReference, panel_name: str) -> None:
     ):
         if expected is not None and sha256(file_path) != expected:
             raise ValueError(f"{panel_name} {artifact} checksum does not match its reference package")
+
+
+def validate_paired_reference_package(package: PairedReferencePackage) -> dict[str, dict[str, int]]:
+    """Validate each panel's tree/alignment identity contract and return a summary."""
+
+    return {
+        "classical": validate_panel_structure(package.classical, "classical"),
+        "cryptic": validate_panel_structure(package.cryptic, "cryptic"),
+    }
+
+
+def validate_panel_structure(panel: PanelReference, panel_name: str) -> dict[str, int]:
+    """Reject a panel whose immutable tree and alignment do not define the same tips."""
+
+    tree = Tree.from_path(panel.tree_path)
+    alignment = read_fasta_alignment(panel.alignment_path)
+    if len(tree.tips) < 2:
+        raise ValueError(f"{panel_name} reference tree must contain at least two tips")
+    tree_ids = set(tree.tip_index)
+    alignment_ids = {sequence.sample_id for sequence in alignment.sequences}
+    if tree_ids != alignment_ids:
+        missing_in_alignment = sorted(tree_ids - alignment_ids)
+        missing_in_tree = sorted(alignment_ids - tree_ids)
+        details: list[str] = []
+        if missing_in_alignment:
+            details.append("tips absent from alignment: " + ", ".join(missing_in_alignment[:10]))
+        if missing_in_tree:
+            details.append("alignment IDs absent from tree: " + ", ".join(missing_in_tree[:10]))
+        raise ValueError(f"{panel_name} tree and alignment IDs differ; " + "; ".join(details))
+    return {"tips": len(tree.tips), "alignment_records": len(alignment.sequences), "columns": alignment.site_count}
 
 
 def sha256(path: Path) -> str:

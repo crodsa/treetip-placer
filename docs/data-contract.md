@@ -10,6 +10,8 @@ A paired reference package is a JSON document with `schema_version: 1`, `classic
 
 `create-reference-package` writes this schema from four existing reference artifacts. It does not copy or modify any tree or alignment. The command records checksums, uses relative paths when possible, and refuses to overwrite an existing manifest.
 
+`validate-reference-package` verifies declared checksums and the structural contract for both panels: each tree must have at least two tips and its tip IDs must exactly equal the reference-alignment IDs. It writes no files and prints JSON suitable for audit automation.
+
 The QC gate reports coverage, comparable sites, ambiguous IUPAC bases, nearest-reference distance, and placement ambiguity. Thresholds are reference-panel specific; do not apply cryptic-only calibrations to a mixed cryptic–classical dataset.
 
 Outputs include drawing-oriented Newick and Nexus trees, authoritative TSV placement/QC tables, JSON, JSONL event logs, and an experimental distance-based JPlace-shaped document. The JPlace objective is not a likelihood. Automatic runs also contain `panel_assignment.tsv`/JSON, two complete panel-specific output directories, MAFFT mapping logs, and selected-panel Newick trees.

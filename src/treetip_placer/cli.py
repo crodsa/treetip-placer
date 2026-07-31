@@ -31,6 +31,7 @@ from .reference_package import (
     PairedReferencePackage,
     create_paired_reference_package,
     load_paired_reference_package,
+    validate_paired_reference_package,
 )
 from .sequence import evaluate_sequence_qc
 from .tree import Tree
@@ -193,6 +194,12 @@ def build_parser() -> argparse.ArgumentParser:
     package.add_argument(
         "-v", "--verbose", action="count", default=0, help="Increase stderr progress detail; repeat for more detail."
     )
+
+    validate_package = subparsers.add_parser(
+        "validate-reference-package",
+        help="Validate paired-reference checksums and tree/alignment identity contracts.",
+    )
+    validate_package.add_argument("--reference-package", required=True, help="Schema-v1 paired reference package JSON.")
     return parser
 
 
@@ -258,6 +265,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_calibrate_panel_gate(arguments)
         if arguments.command == "create-reference-package":
             return run_create_reference_package(arguments)
+        if arguments.command == "validate-reference-package":
+            return run_validate_reference_package(arguments)
     except (OSError, ValueError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
@@ -394,6 +403,25 @@ def run_create_reference_package(arguments: argparse.Namespace) -> int:
         "Created paired reference package",
         output=str(package.manifest_path),
         minimum_distance_separation=package.minimum_distance_separation,
+    )
+    return 0
+
+
+def run_validate_reference_package(arguments: argparse.Namespace) -> int:
+    """Validate a package and print a machine-readable summary to stdout."""
+
+    package = load_paired_reference_package(arguments.reference_package)
+    summary = validate_paired_reference_package(package)
+    print(
+        json.dumps(
+            {
+                "reference_package": str(package.manifest_path),
+                "minimum_distance_separation": package.minimum_distance_separation,
+                "panels": summary,
+            },
+            indent=2,
+            sort_keys=True,
+        )
     )
     return 0
 

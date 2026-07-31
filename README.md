@@ -43,6 +43,12 @@ treetip create-reference-package \
   --output paired_reference.json
 ```
 
+Validate a package before sharing or analyzing it:
+
+```bash
+treetip validate-reference-package --reference-package paired_reference.json
+```
+
 ```bash
 treetip place-auto \
   --reference-package paired_reference.json \
