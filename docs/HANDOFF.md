@@ -35,6 +35,8 @@ A local, non-versioned 135-sequence cryptic reference alignment and IQ-TREE 3 in
 
 The local run at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\auto_panel_stress_test_20260731` confirmed two known cryptic queries as `CRYPTIC` and known clade-4 classical query `9261_clade4?_cryptic.fna` as `CLASSICAL`. The provisional default distance margin is `0.005`; it requires broader labelled calibration before a scientific release.
 
+A local 80-control leave-one-unique-sequence-out gate calibration is available at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\panel_gate_calibration_20260731`. At margin `0.005`, 58/80 controls received a panel call, all 58 were correct, and 22 were retained as ambiguous; at margin `0`, one control was misclassified. This validates conservative gating on these internal panels only, not external generalization or placement-topology accuracy.
+
 ## Next milestones
 
 1. Build a labelled classical/cryptic calibration set to estimate the automatic panel-selection threshold and boundary error rate.
