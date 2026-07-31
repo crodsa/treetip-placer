@@ -87,4 +87,4 @@ When real MLST data are available:
 
 ## Repository state
 
-The project is prepared for a private GitHub backup. The initial local Git history is intentionally separate from any future public release; public publication remains subject to the release checklist and explicit user confirmation. Confirm the active remote with `git remote -v` before continuing work on another computer.
+The project has a private GitHub backup at `https://github.com/crodsa/treetip-placer` on the `main` branch. The initial local Git history is intentionally separate from any future public release; public publication remains subject to the release checklist and explicit user confirmation. Confirm the active remote with `git remote -v` before continuing work on another computer.
