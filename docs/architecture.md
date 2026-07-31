@@ -12,6 +12,8 @@ The QC gate reports coverage, comparable sites, ambiguous bases, panel distance,
 
 `place-auto` maps an uploaded FASTA independently to a classical and a cryptic immutable package using MAFFT `--add --keeplength`. Each mapped query receives a full independent placement. The selector compares only nearest-reference normalized Hamming distances because WLS edge objectives and heuristic weights are not comparable across differently sized trees. It emits a panel label only when the winning distance margin exceeds a recorded calibration threshold; otherwise it emits `AMBIGUOUS` or `UNRESOLVED`.
 
+Paired-reference manifests separate package identity from a specific workstation. They resolve panel tree/alignment paths relative to the manifest and may declare checksums. The automatic command validates declared checksums before using either reference, so an edited tree or alignment cannot silently inherit a prior calibration threshold.
+
 `calibrate-panel-gate` validates that distance gate with deterministic internal leave-one-unique-sequence-out controls. Exact duplicate own-panel sequences are removed before a held-out control is scored. Controls are mapped only to the opposing panel; the procedure deliberately measures panel discrimination rather than WLS insertion accuracy or tree topology recovery.
 
 ## Reference packages

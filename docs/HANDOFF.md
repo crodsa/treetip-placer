@@ -39,6 +39,8 @@ The local stress test at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\
 
 The expanded leave-one-unique-sequence-out calibration at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\panel_gate_calibration_strict_20260731` supports a distance margin of `0.01` for this exact classical/strict-cryptic pair: 194/195 controls were called correctly and one was retained as ambiguous. This validates conservative gating on these internal panels only, not external generalization or placement-topology accuracy.
 
+The portable paired manifest for this local production pair is `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\paired_reference_classical_cryptic_strict_20260731.json`. It uses relative paths and checksums, and was smoke-tested through `place-auto --reference-package`.
+
 ## Next milestones
 
 1. Build a labelled classical/cryptic calibration set to estimate the automatic panel-selection threshold and boundary error rate.

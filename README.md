@@ -20,12 +20,20 @@ The program will reject unequal alignment widths rather than silently realigning
 
 When the origin of an uploaded isolate is unknown, use `place-auto`. It maps the raw query FASTA independently to the immutable classical and cryptic alignments with MAFFT `--add --keeplength`, runs the complete QC/placement workflow for both panels, and then compares the nearest-reference normalized distances.
 
+For routine use, provide one portable paired-reference manifest instead of four individual file paths. Relative paths are resolved beside the manifest and declared SHA-256 checksums are validated before mapping:
+
+```json
+{
+  "schema_version": 1,
+  "minimum_distance_separation": 0.01,
+  "classical": {"tree": "classical/tree.nwk", "alignment": "classical/aligned.fasta"},
+  "cryptic": {"tree": "cryptic/tree.nwk", "alignment": "cryptic/aligned.fasta"}
+}
+```
+
 ```bash
 treetip place-auto \
-  --classical-tree classical.treefile \
-  --classical-reference-alignment classical_aligned.fasta \
-  --cryptic-tree cryptic.treefile \
-  --cryptic-reference-alignment cryptic_aligned.fasta \
+  --reference-package paired_reference.json \
   --query-fasta uploaded_queries.fasta \
   --mafft /path/to/mafft \
   --output automatic_run \

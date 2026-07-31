@@ -26,6 +26,7 @@ from .models import AlignedSequence, PlacementConfig, PlacementResult, RunMetada
 from .outputs import render_placed_tree, write_run_outputs
 from .panel_selection import choose_reference_panel, write_panel_selection_outputs
 from .placement import place_query
+from .reference_package import PanelReference, PairedReferencePackage, load_paired_reference_package
 from .sequence import evaluate_sequence_qc
 from .tree import Tree
 
@@ -118,17 +119,18 @@ def build_parser() -> argparse.ArgumentParser:
         "place-auto",
         help="Map raw query FASTA to classical and cryptic panels, then select conservatively.",
     )
-    auto.add_argument("--classical-tree", required=True, help="Classical reference branch-length Newick tree.")
-    auto.add_argument("--classical-reference-alignment", required=True, help="Classical reference fixed-column FASTA alignment.")
-    auto.add_argument("--cryptic-tree", required=True, help="Cryptic reference branch-length Newick tree.")
-    auto.add_argument("--cryptic-reference-alignment", required=True, help="Cryptic reference fixed-column FASTA alignment.")
+    auto.add_argument("--reference-package", help="Schema-v1 paired classical/cryptic reference package JSON.")
+    auto.add_argument("--classical-tree", help="Classical reference branch-length Newick tree.")
+    auto.add_argument("--classical-reference-alignment", help="Classical reference fixed-column FASTA alignment.")
+    auto.add_argument("--cryptic-tree", help="Cryptic reference branch-length Newick tree.")
+    auto.add_argument("--cryptic-reference-alignment", help="Cryptic reference fixed-column FASTA alignment.")
     auto.add_argument("--query-fasta", required=True, help="Raw query FASTA; mapped separately to both panels.")
     auto.add_argument("--mafft", required=True, help="MAFFT executable or wrapper for --add --keeplength mapping.")
     auto.add_argument("--mafft-threads", type=positive_integer, default=1, help="MAFFT threads per mapping.")
     auto.add_argument(
         "--min-panel-distance-separation",
         type=nonnegative_float,
-        default=0.01,
+        default=None,
         help="Minimum nearest-reference distance advantage required for a panel assignment.",
     )
     auto.add_argument("--output", required=True, help="New, empty output directory.")
@@ -349,6 +351,7 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
 
     logger = EventLogger(arguments.verbose)
     logger.event(1, "start", "Starting automatic classical/cryptic panel placement", version=__version__)
+    package, minimum_distance_separation = resolve_auto_reference_inputs(arguments)
     output = prepare_output_directory(arguments.output)
     source_records = read_fasta_records(arguments.query_fasta)
     source_ids = tuple(sample_id for sample_id, _ in source_records)
@@ -362,7 +365,7 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
         mafft_threads=arguments.mafft_threads,
         query_fasta=arguments.query_fasta,
         query_ids=source_ids,
-        reference_alignment=arguments.classical_reference_alignment,
+        reference_alignment=str(package.classical.alignment_path),
         mapping_directory=mapping_directory,
         logger=logger,
     )
@@ -372,7 +375,7 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
         mafft_threads=arguments.mafft_threads,
         query_fasta=arguments.query_fasta,
         query_ids=source_ids,
-        reference_alignment=arguments.cryptic_reference_alignment,
+        reference_alignment=str(package.cryptic.alignment_path),
         mapping_directory=mapping_directory,
         logger=logger,
     )
@@ -381,8 +384,8 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     panels_root.mkdir()
     classical = run_panel_placement(
         panel_name="classical",
-        tree_path=arguments.classical_tree,
-        reference_alignment_path=arguments.classical_reference_alignment,
+        tree_path=str(package.classical.tree_path),
+        reference_alignment_path=str(package.classical.alignment_path),
         query_alignment_path=classical_queries,
         output_directory=panels_root / "classical",
         arguments=arguments,
@@ -390,8 +393,8 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     )
     cryptic = run_panel_placement(
         panel_name="cryptic",
-        tree_path=arguments.cryptic_tree,
-        reference_alignment_path=arguments.cryptic_reference_alignment,
+        tree_path=str(package.cryptic.tree_path),
+        reference_alignment_path=str(package.cryptic.alignment_path),
         query_alignment_path=cryptic_queries,
         output_directory=panels_root / "cryptic",
         arguments=arguments,
@@ -400,7 +403,7 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     decisions = choose_reference_panel(
         classical.results,
         cryptic.results,
-        arguments.min_panel_distance_separation,
+        minimum_distance_separation,
     )
     selection_summary = summarize_decisions(decisions)
     logger.event(1, "selection", "Completed conservative panel selection", **selection_summary)
@@ -411,11 +414,12 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
             "version": __version__,
             "query_fasta_path": str(Path(arguments.query_fasta).resolve()),
             "query_fasta_sha256": file_sha256(arguments.query_fasta),
-            "classical_tree_path": str(Path(arguments.classical_tree).resolve()),
-            "classical_reference_alignment_path": str(Path(arguments.classical_reference_alignment).resolve()),
-            "cryptic_tree_path": str(Path(arguments.cryptic_tree).resolve()),
-            "cryptic_reference_alignment_path": str(Path(arguments.cryptic_reference_alignment).resolve()),
-            "minimum_distance_separation": arguments.min_panel_distance_separation,
+            "reference_package_path": str(package.manifest_path) if package.manifest_path else None,
+            "classical_tree_path": str(package.classical.tree_path),
+            "classical_reference_alignment_path": str(package.classical.alignment_path),
+            "cryptic_tree_path": str(package.cryptic.tree_path),
+            "cryptic_reference_alignment_path": str(package.cryptic.alignment_path),
+            "minimum_distance_separation": minimum_distance_separation,
             "selection_method": "nearest_reference_normalized_hamming_distance",
             "warning": "Distance-separation thresholds require empirical calibration for each pair of panels.",
         },
@@ -425,6 +429,57 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     logger.event(1, "complete", "Automatic panel placement completed", **selection_summary)
     append_final_event(output, logger.events[-1])
     return 0
+
+
+def resolve_auto_reference_inputs(
+    arguments: argparse.Namespace,
+) -> tuple[PairedReferencePackage, float]:
+    """Resolve either a checked package manifest or a complete explicit file quartet."""
+
+    explicit_values = (
+        arguments.classical_tree,
+        arguments.classical_reference_alignment,
+        arguments.cryptic_tree,
+        arguments.cryptic_reference_alignment,
+    )
+    if arguments.reference_package:
+        if any(explicit_values):
+            raise ValueError(
+                "--reference-package cannot be combined with explicit classical/cryptic tree or alignment paths"
+            )
+        package = load_paired_reference_package(arguments.reference_package)
+        threshold = (
+            arguments.min_panel_distance_separation
+            if arguments.min_panel_distance_separation is not None
+            else package.minimum_distance_separation
+        )
+        return package, threshold
+    if not all(explicit_values):
+        raise ValueError(
+            "Provide --reference-package or all four explicit classical/cryptic tree and alignment paths"
+        )
+    package = PairedReferencePackage(
+        manifest_path=None,
+        classical=PanelReference(
+            tree_path=Path(arguments.classical_tree).resolve(),
+            alignment_path=Path(arguments.classical_reference_alignment).resolve(),
+            tree_sha256=None,
+            alignment_sha256=None,
+        ),
+        cryptic=PanelReference(
+            tree_path=Path(arguments.cryptic_tree).resolve(),
+            alignment_path=Path(arguments.cryptic_reference_alignment).resolve(),
+            tree_sha256=None,
+            alignment_sha256=None,
+        ),
+        minimum_distance_separation=0.01,
+    )
+    threshold = (
+        arguments.min_panel_distance_separation
+        if arguments.min_panel_distance_separation is not None
+        else package.minimum_distance_separation
+    )
+    return package, threshold
 
 
 def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
