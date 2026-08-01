@@ -49,6 +49,25 @@ class PlacementTests(unittest.TestCase):
         self.assertIsNone(result.best_fit)
         self.assertTrue(any(finding.code == "LOW_COVERAGE" for finding in result.qc.findings))
 
+    def test_diffuse_weight_without_bootstrap_is_a_warning(self) -> None:
+        configuration = PlacementConfig(
+            preset="thorough",
+            min_coverage=0.5,
+            min_comparable_sites=2,
+            unresolved_weight=1.0,
+        )
+        result = place_query(
+            AlignedSequence("intermediate", tuple("AAAACCGG")),
+            self.references,
+            self.tree,
+            configuration,
+        )
+
+        self.assertEqual(result.final_status, "WARN")
+        self.assertTrue(
+            any(finding.code == "DIFFUSE_DISTANCE_WEIGHT" for finding in result.qc.findings)
+        )
+
     def test_rendered_tree_is_parseable_and_contains_query(self) -> None:
         result = place_query(AlignedSequence("query_A", self.references[0].characters), self.references, self.tree, self.config)
         rendered = render_placed_tree(self.tree, [result])

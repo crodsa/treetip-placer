@@ -118,6 +118,7 @@ Each query receives `PASS`, `WARN`, `FAIL`, or `UNRESOLVED`. The gate checks ali
 
 - The scorer is categorical fixed-column distance, not maximum likelihood.
 - Relative-fit weights are heuristic distance-objective weights, not likelihood weight ratios or posterior probabilities.
+- Without requested bootstrap replicates, a diffuse relative-fit weight is reported as `WARN`, not a phylogenetic support value; low requested bootstrap support remains `UNRESOLVED`.
 - Local NNI/SPR refinement and recomputed local support are not yet implemented.
 - Cross-panel assignment is a distance gate, not a taxonomic classifier or a phylogenetic likelihood-ratio test.
 
@@ -130,3 +131,7 @@ python -m unittest discover -s tests -v
 ```
 
 Do not commit private alignments, genomes, isolates, identifiers, or credentials. Project continuity notes are in [docs/HANDOFF.md](docs/HANDOFF.md).
+
+## License
+
+This private development repository is proprietary and research/development-only. Redistribution or public release requires explicit written permission; see [LICENSE](LICENSE).

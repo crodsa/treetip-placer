@@ -97,12 +97,13 @@ def place_query(
                 message=(
                     f"Best relative-fit weight is {best.relative_fit_weight:.3f}, below "
                     f"the configured resolution threshold {config.unresolved_weight:.3f}. "
-                    "This heuristic is reported as a warning when bootstrap support is available."
+                    "This distance heuristic is reported as a warning; requested bootstrap "
+                    "support can independently make the placement unresolved."
                 ),
             )
         )
-        if bootstrap_support is None:
-            final_status = "UNRESOLVED"
+        if bootstrap_support is None and final_status == "PASS":
+            final_status = "WARN"
     if bootstrap_support is not None and bootstrap_support < config.unresolved_weight:
         final_status = "UNRESOLVED"
         qc.findings.append(

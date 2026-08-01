@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "treetip-placer"
-version = "0.6.3"
+version = "0.6.4"
 description = "Quality-controlled placement of fixed-column FASTA alignments on a reference tree."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "License selection pending before public release"}
+license = {text = "Proprietary: all rights reserved; research/development only"}
 authors = [{name = "TreeTip Placer contributors"}]
 classifiers = [
     "Development Status :: 3 - Alpha",
