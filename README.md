@@ -63,6 +63,10 @@ treetip place-auto \
 
 The result is deliberately conservative. `panel_assignment.tsv` contains one `CLASSICAL`, `CRYPTIC`, `AMBIGUOUS`, or `UNRESOLVED` call per query. A call is made only when its nearest-reference distance is better than the other panel by `--min-panel-distance-separation` (default `0.01`). This provisional default was calibrated for the current paired panels and must be recalibrated with known classical, cryptic, and boundary samples whenever either reference package changes. `report.html` is a human-readable index with direct artifact links. For every panel assigned to one or more queries, it shows the complete selected tree for context and a placement-branch zoom for each assigned query; `selected_trees/` contains one directly drawable Newick tree per selected panel; `panels/` retains both complete, auditable placement runs.
 
+Synthetic report layout preview (no biological data or real identifiers):
+
+![Synthetic placement report preview](docs/assets/placement-report-preview-synthetic.png)
+
 Tip-clade metadata is optional and uses a two-column UTF-8 TSV with the exact headers `reference_tip_id` and `clade`. It can be checksummed into the paired reference package and then loads automatically; command-line TSV paths can explicitly override it for a run. If supplied, `place-auto` writes `clade_assignment.tsv` and JSON. A `PASS` clade call has one label among the annotated descendant reference tips on the selected placement edge. Mixed or unlabelled edge labels use a nearest-labelled-reference fallback only as explicit `WARN`; unavailable labels remain `UNRESOLVED`. An `UNRESOLVED` placement never emits a clade label. These are discrete calls on a fixed reference tree, not a new phylogenetic reconstruction or bootstrap calculation.
 
 Validate the discrete clade rule without modifying the backbone with deterministic labelled leave-one-unique-sequence-out controls:
