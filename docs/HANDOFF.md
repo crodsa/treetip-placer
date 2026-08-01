@@ -45,6 +45,8 @@ The portable paired manifest for this local production pair is `C:\Users\crodrig
 
 Automatic runs now include a self-contained `report.html` index beside the authoritative tables and trees. For a selected panel, it shows a complete-tree context dendrogram and a branch zoom for each newly placed query; no unselected panel is shown. Report rendering is covered by the complete unit-test suite and was verified in a fresh permitted-data end-to-end smoke run at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\single_cryptic_report_context_smoke_20260731`: the query was assigned `CRYPTIC`, and the report contained the selected cryptic full-tree view and one placement zoom with no classical full-tree view.
 
+The fixed-tree clade workflow was validated locally with the permitted supplementary `Table S2` metadata. The resulting non-versioned cryptic tip-clade TSV contains 105 included labels, 28 unlabelled reference tips, and one excluded non-cryptic table label. In the one-query end-to-end smoke run at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\single_cryptic_clade_warn_smoke_20260801`, the selected edge contained mixed clade labels, so the tool emitted an explicit `WARN` nearest-labelled-reference fallback instead of an unsupported `PASS` clade call. The output contained `clade_assignment.tsv`/JSON and an HTML report with only the selected cryptic tree.
+
 ## Next milestones
 
 1. Build a labelled classical/cryptic calibration set to estimate the automatic panel-selection threshold and boundary error rate.

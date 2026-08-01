@@ -74,9 +74,10 @@ def assign_phylogenetic_clades(
     """Assign a clade only when a selected fixed-tree placement supports one label.
 
     A single clade among all labelled reference tips below the selected edge is a
-    direct fixed-tree clade call.  If that local subtree is unlabelled, the nearest
-    labelled reference is a clearly marked fallback.  Mixed labels are unresolved;
-    the function never invents a new topology or recomputes bootstrap support.
+    direct fixed-tree clade call. If the selected edge is mixed or unlabelled, a
+    nearest-labelled-reference fallback is retained as ``WARN`` rather than being
+    silently promoted to a direct edge-derived call. The function never invents a
+    new topology or recomputes bootstrap support.
     """
 
     result_by_panel = {
@@ -158,6 +159,23 @@ def assign_phylogenetic_clades(
             )
             continue
         if len(subtree_clades) > 1:
+            if nearest_reference in labels:
+                assignments.append(
+                    CladeAssignment(
+                        sample_id=decision.sample_id,
+                        selected_panel=panel_name,
+                        phylogenetic_clade=labels[nearest_reference],
+                        clade_assignment_status="WARN",
+                        assignment_method="nearest_labelled_reference_mixed_edge_fallback",
+                        nearest_reference=nearest_reference,
+                        supporting_reference_tips=(nearest_reference,),
+                        findings=(
+                            "MIXED_CLADE_LABELS_ON_SELECTED_EDGE",
+                            "NEAREST_LABELLED_REFERENCE_FALLBACK",
+                        ),
+                    )
+                )
+                continue
             assignments.append(
                 CladeAssignment(
                     sample_id=decision.sample_id,

@@ -72,6 +72,35 @@ class CladeAssignmentTests(unittest.TestCase):
         self.assertEqual(assignment.clade_assignment_status, "UNRESOLVED")
         self.assertIn("NO_TIP_CLADE_METADATA_FOR_SELECTED_PANEL", assignment.findings)
 
+    def test_mixed_edge_uses_nearest_labelled_reference_as_warn_fallback(self) -> None:
+        mixed_child = self.tree.root.children[0]
+        mixed_result = PlacementResult(
+            sample_id="query",
+            qc=self.result.qc,
+            final_status="PASS",
+            best_fit=EdgeFit(
+                edge_id=self.tree.edge_by_child[mixed_child.node_id].edge_id,
+                parent_id=mixed_child.parent.node_id if mixed_child.parent else -1,
+                child_id=mixed_child.node_id,
+                distal_length=0.05,
+                pendant_length=0.01,
+                objective=0.0,
+                rmse=0.0,
+            ),
+        )
+        assignment = assign_phylogenetic_clades(
+            [self.decision],
+            {"cryptic": (self.tree, [mixed_result])},
+            {"cryptic": {"A": "C-II", "B": "C-III", "C": "C-III"}},
+        )[0]
+
+        self.assertEqual(assignment.phylogenetic_clade, "C-II")
+        self.assertEqual(assignment.clade_assignment_status, "WARN")
+        self.assertEqual(
+            assignment.assignment_method,
+            "nearest_labelled_reference_mixed_edge_fallback",
+        )
+
     def test_loader_and_output_reject_unknown_tip_ids(self) -> None:
         root = Path.cwd() / ".treetip-clade-assignment-test"
         if root.exists():
