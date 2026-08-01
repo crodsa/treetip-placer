@@ -6,7 +6,8 @@ import shutil
 import unittest
 from pathlib import Path
 
-from treetip_placer.cli import main
+from treetip_placer.cli import main, select_clade_calibration_controls
+from treetip_placer.models import AlignedSequence
 
 
 class CliTests(unittest.TestCase):
@@ -77,10 +78,24 @@ class CliTests(unittest.TestCase):
             self.assertEqual(exit_code, 0)
             self.assertIn("truth_clade", (output / "clade_calibration_records.tsv").read_text(encoding="utf-8"))
             self.assertTrue((output / "clade_confusion.tsv").is_file())
+            self.assertTrue((output / "clade_calibration_exclusions.tsv").is_file())
             self.assertTrue((output / "clade_calibration_summary.json").is_file())
         finally:
             if root.exists():
                 shutil.rmtree(root)
+
+    def test_clade_controls_exclude_singleton_labelled_clades(self) -> None:
+        controls = select_clade_calibration_controls(
+            (
+                AlignedSequence("A", ("A", "A")),
+                AlignedSequence("B", ("A", "T")),
+                AlignedSequence("C", ("C", "C")),
+            ),
+            {"A": "C-I", "B": "C-I", "C": "C-VI"},
+            10,
+        )
+
+        self.assertEqual(controls, ("A", "B"))
 
 
 

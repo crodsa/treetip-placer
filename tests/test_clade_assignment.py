@@ -72,6 +72,23 @@ class CladeAssignmentTests(unittest.TestCase):
         self.assertEqual(assignment.clade_assignment_status, "UNRESOLVED")
         self.assertIn("NO_TIP_CLADE_METADATA_FOR_SELECTED_PANEL", assignment.findings)
 
+    def test_unresolved_placement_cannot_emit_a_clade_call(self) -> None:
+        unresolved_result = PlacementResult(
+            sample_id="query",
+            qc=self.result.qc,
+            final_status="UNRESOLVED",
+            best_fit=self.result.best_fit,
+        )
+        assignment = assign_phylogenetic_clades(
+            [self.decision],
+            {"cryptic": (self.tree, [unresolved_result])},
+            {"cryptic": {"A": "C-II", "B": "C-II", "C": "C-III"}},
+        )[0]
+
+        self.assertIsNone(assignment.phylogenetic_clade)
+        self.assertEqual(assignment.clade_assignment_status, "UNRESOLVED")
+        self.assertEqual(assignment.findings, ("SELECTED_PLACEMENT_UNRESOLVED",))
+
     def test_mixed_edge_uses_nearest_labelled_reference_as_warn_fallback(self) -> None:
         mixed_child = self.tree.root.children[0]
         mixed_result = PlacementResult(

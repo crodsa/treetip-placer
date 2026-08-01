@@ -51,12 +51,14 @@ The fixed-tree clade workflow was validated locally with the permitted supplemen
 
 The known classical `ST|clade` tree-tip convention was used to create the non-versioned `classical_tip_clades_reference_20260801.tsv` with 200 labels. The new package `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\paired_reference_with_tip_clades_20260801.json` checksums both the classical and cryptic metadata TSVs and validated successfully: 200 classical tips across 3537 columns and 134 cryptic tips across 3501 columns.
 
-`calibrate-clade-assignment` was run locally with five deterministic unique-sequence controls per represented clade. `classical_clade_calibration_20260801` yielded 25/25 clade-correct calls, all explicitly `CORRECT_WARN`; this requires interpretation before any confidence promotion. `cryptic_clade_calibration_20260801` yielded 22 `CORRECT_WARN`, four `UNRESOLVED`, and one `INCORRECT_CALL` across 27 controls. The unresolved and incorrect controls are retained in the local records for focused inspection; no labels were changed automatically.
+`calibrate-clade-assignment` was run locally with five deterministic unique-sequence controls per represented clade. `classical_clade_calibration_20260801` yielded 25/25 clade-correct calls, all explicitly `CORRECT_WARN`; this requires interpretation before any confidence promotion. The first cryptic run showed one apparent incorrect C-VI call, but investigation established that C-VI has only one labelled reference tip. Version 0.6.3 therefore excludes singleton-labelled clades from leave-one-out evaluation and writes `clade_calibration_exclusions.tsv`. The corrected diagnostic at `cryptic_clade_calibration_edge_diagnostic_v2_20260801` evaluated 26 controls: 22 `CORRECT_WARN`, four `UNRESOLVED`, and zero incorrect calls; C-VI is explicitly excluded. The unresolved C-V/C-VII controls remain evidence of insufficient labelled edge resolution, and no labels were changed automatically.
+
+Version 0.6.3 also prevents any underlying `UNRESOLVED` placement from emitting a discrete clade label. This fixes an overly permissive fallback that could otherwise present a nearest labelled tip despite unresolved placement geometry.
 
 ## Next milestones
 
 1. Build a labelled classical/cryptic calibration set to estimate the automatic panel-selection threshold and boundary error rate.
-2. Review the cryptic `UNRESOLVED` and `INCORRECT_CALL` leave-one-out records, especially C-V/C-VI/C-VII boundary neighborhoods; keep unannotated tips unlabelled unless independently curated.
+2. Review the cryptic `UNRESOLVED` leave-one-out records, especially C-V/C-VII boundary neighborhoods; keep unannotated tips unlabelled unless independently curated. C-VI requires at least one additional independently curated labelled reference before internal leave-one-out evaluation is possible.
 3. Decide whether systematic `WARN` calls in the classical calibration reflect appropriate conservative QC thresholds or require a separately validated confidence policy.
 4. Add alignment leave-one-out validation and panel-pair calibration reports.
 

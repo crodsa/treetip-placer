@@ -134,6 +134,20 @@ def assign_phylogenetic_clades(
                 )
             )
             continue
+        if result.final_status == "UNRESOLVED":
+            assignments.append(
+                CladeAssignment(
+                    sample_id=decision.sample_id,
+                    selected_panel=panel_name,
+                    phylogenetic_clade=None,
+                    clade_assignment_status="UNRESOLVED",
+                    assignment_method=None,
+                    nearest_reference=nearest_reference,
+                    supporting_reference_tips=(),
+                    findings=("SELECTED_PLACEMENT_UNRESOLVED",),
+                )
+            )
+            continue
 
         edge = tree.edge_by_child[result.best_fit.child_id]
         subtree_tips = [

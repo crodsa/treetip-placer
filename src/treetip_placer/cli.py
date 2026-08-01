@@ -774,6 +774,7 @@ def run_calibrate_clade_assignment(arguments: argparse.Namespace) -> int:
     if set(tree.tip_index) != set(reference_by_id):
         raise ValueError("Reference tree tips do not exactly match reference alignment IDs")
     labels = load_tip_clades(arguments.tip_clades, tree, "reference")
+    label_counts = clade_label_counts(labels)
     controls = select_clade_calibration_controls(
         alignment.sequences, labels, arguments.max_controls_per_clade
     )
@@ -785,7 +786,8 @@ def run_calibrate_clade_assignment(arguments: argparse.Namespace) -> int:
         "Selected labelled unique-sequence leave-one-out controls",
         controls=len(controls),
         labelled_tips=len(labels),
-        clades=len(set(labels.values())),
+        eligible_clades=sum(count >= 2 for count in label_counts.values()),
+        excluded_singleton_clades=sum(count == 1 for count in label_counts.values()),
     )
     config = placement_config_from_arguments(arguments)
     records: list[dict[str, object]] = []
@@ -839,7 +841,7 @@ def run_calibrate_clade_assignment(arguments: argparse.Namespace) -> int:
         )
         if number == len(controls) or number % 10 == 0:
             logger.event(2, "calibration", "Completed leave-one-out controls", completed=number, controls=len(controls))
-    write_clade_calibration_outputs(output, records, arguments, tree, alignment)
+    write_clade_calibration_outputs(output, records, arguments, tree, alignment, label_counts)
     summary = summarize_clade_calibration(records)
     logger.event(1, "calibration", "Completed fixed-tree clade calibration", **summary)
     (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
@@ -851,15 +853,20 @@ def run_calibrate_clade_assignment(arguments: argparse.Namespace) -> int:
 def select_clade_calibration_controls(
     sequences: Sequence[AlignedSequence], labels: dict[str, str], maximum_per_clade: int
 ) -> tuple[str, ...]:
-    """Select deterministic labelled controls that have no exact sequence duplicate."""
+    """Select controls only when their clade retains a labelled reference tip."""
 
     counts: dict[tuple[str | None, ...], int] = {}
     for sequence in sequences:
         counts[sequence.characters] = counts.get(sequence.characters, 0) + 1
+    label_counts = clade_label_counts(labels)
     by_clade: dict[str, list[str]] = {}
     for sequence in sequences:
         clade = labels.get(sequence.sample_id)
-        if clade is not None and counts[sequence.characters] == 1:
+        if (
+            clade is not None
+            and label_counts[clade] >= 2
+            and counts[sequence.characters] == 1
+        ):
             by_clade.setdefault(clade, []).append(sequence.sample_id)
     return tuple(
         sample_id
@@ -868,12 +875,22 @@ def select_clade_calibration_controls(
     )
 
 
+def clade_label_counts(labels: dict[str, str]) -> dict[str, int]:
+    """Count annotated reference tips per discrete clade."""
+
+    counts: dict[str, int] = {}
+    for clade in labels.values():
+        counts[clade] = counts.get(clade, 0) + 1
+    return counts
+
+
 def write_clade_calibration_outputs(
     output: Path,
     records: Sequence[dict[str, object]],
     arguments: argparse.Namespace,
     tree: Tree,
     alignment: object,
+    label_counts: dict[str, int],
 ) -> None:
     """Write auditable records, confusion counts, and provenance for clade calibration."""
 
@@ -895,6 +912,23 @@ def write_clade_calibration_outputs(
         writer.writeheader()
         for (truth, predicted), controls in sorted(confusion.items()):
             writer.writerow({"truth_clade": truth, "predicted_clade": predicted, "controls": controls})
+    with (output / "clade_calibration_exclusions.tsv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=["clade", "labelled_reference_tips", "reason"],
+            delimiter="\t",
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for clade, count in sorted(label_counts.items()):
+            if count < 2:
+                writer.writerow(
+                    {
+                        "clade": clade,
+                        "labelled_reference_tips": count,
+                        "reason": "ONLY_ONE_LABELLED_REFERENCE_TIP_REMAINS_AFTER_HOLDOUT",
+                    }
+                )
     summary = {
         "version": __version__,
         "method": "fixed_tree_leave_one_unique_sequence_out_discrete_clade_assignment",
@@ -908,6 +942,10 @@ def write_clade_calibration_outputs(
         "reference_tips": len(tree.tips),
         "reference_columns": getattr(alignment, "site_count"),
         "max_controls_per_clade": arguments.max_controls_per_clade,
+        "labelled_reference_tips_per_clade": dict(sorted(label_counts.items())),
+        "excluded_singleton_clades": sorted(
+            clade for clade, count in label_counts.items() if count < 2
+        ),
         "summary": summarize_clade_calibration(records),
     }
     (output / "clade_calibration_summary.json").write_text(
