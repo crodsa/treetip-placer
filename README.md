@@ -39,6 +39,8 @@ treetip create-reference-package \
   --classical-reference-alignment classical/aligned.fasta \
   --cryptic-tree cryptic/tree.nwk \
   --cryptic-reference-alignment cryptic/aligned.fasta \
+  --classical-tip-clades classical_tip_clades.tsv \
+  --cryptic-tip-clades cryptic_tip_clades.tsv \
   --min-panel-distance-separation 0.01 \
   --output paired_reference.json
 ```
@@ -54,8 +56,6 @@ treetip place-auto \
   --reference-package paired_reference.json \
   --query-fasta uploaded_queries.fasta \
   --mafft /path/to/mafft \
-  --classical-tip-clades classical_tip_clades.tsv \
-  --cryptic-tip-clades cryptic_tip_clades.tsv \
   --output automatic_run \
   --bootstrap 100 \
   --verbose
@@ -63,7 +63,22 @@ treetip place-auto \
 
 The result is deliberately conservative. `panel_assignment.tsv` contains one `CLASSICAL`, `CRYPTIC`, `AMBIGUOUS`, or `UNRESOLVED` call per query. A call is made only when its nearest-reference distance is better than the other panel by `--min-panel-distance-separation` (default `0.01`). This provisional default was calibrated for the current paired panels and must be recalibrated with known classical, cryptic, and boundary samples whenever either reference package changes. `report.html` is a human-readable index with direct artifact links. For every panel assigned to one or more queries, it shows the complete selected tree for context and a placement-branch zoom for each assigned query; `selected_trees/` contains one directly drawable Newick tree per selected panel; `panels/` retains both complete, auditable placement runs.
 
-Tip-clade metadata is optional and uses a two-column UTF-8 TSV with the exact headers `reference_tip_id` and `clade`. If supplied, `place-auto` writes `clade_assignment.tsv` and JSON. A `PASS` clade call has one label among the annotated descendant reference tips on the selected placement edge. Mixed or unlabelled edge labels use a nearest-labelled-reference fallback only as explicit `WARN`; unavailable labels remain `UNRESOLVED`. These are discrete calls on a fixed reference tree, not a new phylogenetic reconstruction or bootstrap calculation.
+Tip-clade metadata is optional and uses a two-column UTF-8 TSV with the exact headers `reference_tip_id` and `clade`. It can be checksummed into the paired reference package and then loads automatically; command-line TSV paths can explicitly override it for a run. If supplied, `place-auto` writes `clade_assignment.tsv` and JSON. A `PASS` clade call has one label among the annotated descendant reference tips on the selected placement edge. Mixed or unlabelled edge labels use a nearest-labelled-reference fallback only as explicit `WARN`; unavailable labels remain `UNRESOLVED`. These are discrete calls on a fixed reference tree, not a new phylogenetic reconstruction or bootstrap calculation.
+
+Validate the discrete clade rule without modifying the backbone with deterministic labelled leave-one-unique-sequence-out controls:
+
+```bash
+treetip calibrate-clade-assignment \
+  --tree cryptic/tree.nwk \
+  --reference-alignment cryptic/aligned.fasta \
+  --tip-clades cryptic_tip_clades.tsv \
+  --max-controls-per-clade 20 \
+  --output cryptic_clade_calibration \
+  --preset thorough \
+  --verbose
+```
+
+For each control, the command removes its tip from the fixed tree and its sequence from the reference alignment, then applies the production placement and discrete clade rule. `clade_calibration_records.tsv`, `clade_confusion.tsv`, and `clade_calibration_summary.json` distinguish `CORRECT_PASS`, `CORRECT_WARN`, `INCORRECT_CALL`, and `UNRESOLVED`. This is internal validation only; it does not recalculate a topology or phylogenetic support.
 
 Calibrate the paired-panel distance gate with internal leave-one-unique-sequence-out controls:
 

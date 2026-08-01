@@ -16,6 +16,8 @@ Paired-reference manifests separate package identity from a specific workstation
 
 `calibrate-panel-gate` validates that distance gate with deterministic internal leave-one-unique-sequence-out controls. Exact duplicate own-panel sequences are removed before a held-out control is scored. Controls are mapped only to the opposing panel; the procedure deliberately measures panel discrimination rather than WLS insertion accuracy or tree topology recovery.
 
+`calibrate-clade-assignment` is a separate fixed-tree diagnostic. It selects labelled reference tips with unique aligned sequences, prunes one control tip from the backbone at a time, and runs the normal WLS placement followed by the discrete descendant-label rule. Its outputs quantify agreement with known clade labels; they are neither topology reconstruction nor support recalculation.
+
 ## Reference packages
 
 A reference package must preserve the original alignment, tree, sample-ID mapping, filtering/masking rules, sequence partitions when available, software versions, and checksums. A cryptic-only package and a mixed cryptic–classical package require separate calibration because their distance distributions differ.

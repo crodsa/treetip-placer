@@ -101,6 +101,8 @@ class ReferencePackageTests(unittest.TestCase):
             classical_alignment = root / "classical.fasta"
             cryptic_tree = root / "cryptic.nwk"
             cryptic_alignment = root / "cryptic.fasta"
+            classical_clades = root / "classical_tip_clades.tsv"
+            cryptic_clades = root / "cryptic_tip_clades.tsv"
             for path, contents in (
                 (classical_tree, "(A:1,B:1);\n"),
                 (classical_alignment, ">A\nAAAA\n>B\nAAAT\n"),
@@ -108,6 +110,8 @@ class ReferencePackageTests(unittest.TestCase):
                 (cryptic_alignment, ">C\nCCCC\n>D\nCCCT\n"),
             ):
                 path.write_text(contents, encoding="utf-8")
+            classical_clades.write_text("reference_tip_id\tclade\nA\t1\nB\t2\n", encoding="utf-8")
+            cryptic_clades.write_text("reference_tip_id\tclade\nC\tC-I\nD\tC-II\n", encoding="utf-8")
 
             package = create_paired_reference_package(
                 root / "paired_reference.json",
@@ -117,11 +121,15 @@ class ReferencePackageTests(unittest.TestCase):
                 cryptic_tree=cryptic_tree,
                 cryptic_alignment=cryptic_alignment,
                 minimum_distance_separation=0.01,
+                classical_tip_clades=classical_clades,
+                cryptic_tip_clades=cryptic_clades,
             )
 
             self.assertEqual(package.minimum_distance_separation, 0.01)
             self.assertEqual(package.classical.tree_sha256, digest(classical_tree))
             self.assertEqual(package.cryptic.alignment_sha256, digest(cryptic_alignment))
+            self.assertEqual(package.classical.tip_clades_path, classical_clades)
+            self.assertEqual(package.cryptic.tip_clades_sha256, digest(cryptic_clades))
         finally:
             if root.exists():
                 shutil.rmtree(root)

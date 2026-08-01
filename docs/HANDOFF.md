@@ -1,6 +1,6 @@
 # Project handoff
 
-Last updated: 2026-07-31
+Last updated: 2026-08-01
 
 ## Purpose
 
@@ -13,6 +13,8 @@ TreeTip Placer places aligned nucleotide sequences on an immutable reference tre
 - Pre-placement QC, optional site bootstrap, parallel query execution, and explicit progress logs.
 - Newick, Nexus, TSV, JSON, JSONL, and experimental distance-JPlace outputs.
 - `place-auto` maps an uploaded FASTA independently to paired classical and cryptic references with MAFFT `--add --keeplength`, runs both placements, and writes an auditable conservative panel assignment plus selected-panel trees.
+- Tip-clade metadata can be checksummed inside a paired-reference package; package-bound metadata loads automatically unless a run explicitly supplies another TSV.
+- `calibrate-clade-assignment` performs deterministic labelled leave-one-unique-sequence-out controls against a fixed tree, writing record-level outcomes and a clade confusion table without recalculating topology or phylogenetic support.
 
 ## Important limitations
 
@@ -47,13 +49,17 @@ Automatic runs now include a self-contained `report.html` index beside the autho
 
 The fixed-tree clade workflow was validated locally with the permitted supplementary `Table S2` metadata. The resulting non-versioned cryptic tip-clade TSV contains 105 included labels, 28 unlabelled reference tips, and one excluded non-cryptic table label. In the one-query end-to-end smoke run at `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\single_cryptic_clade_warn_smoke_20260801`, the selected edge contained mixed clade labels, so the tool emitted an explicit `WARN` nearest-labelled-reference fallback instead of an unsupported `PASS` clade call. The output contained `clade_assignment.tsv`/JSON and an HTML report with only the selected cryptic tree.
 
+The known classical `ST|clade` tree-tip convention was used to create the non-versioned `classical_tip_clades_reference_20260801.tsv` with 200 labels. The new package `C:\Users\crodriguez\Desktop\treetip-placer-local-runs\paired_reference_with_tip_clades_20260801.json` checksums both the classical and cryptic metadata TSVs and validated successfully: 200 classical tips across 3537 columns and 134 cryptic tips across 3501 columns.
+
+`calibrate-clade-assignment` was run locally with five deterministic unique-sequence controls per represented clade. `classical_clade_calibration_20260801` yielded 25/25 clade-correct calls, all explicitly `CORRECT_WARN`; this requires interpretation before any confidence promotion. `cryptic_clade_calibration_20260801` yielded 22 `CORRECT_WARN`, four `UNRESOLVED`, and one `INCORRECT_CALL` across 27 controls. The unresolved and incorrect controls are retained in the local records for focused inspection; no labels were changed automatically.
+
 ## Next milestones
 
 1. Build a labelled classical/cryptic calibration set to estimate the automatic panel-selection threshold and boundary error rate.
-2. Create non-versioned tip-clade TSV metadata for the local production panels. The inspected cryptic supplementary table matched 106 of 134 strict-cryptic reference tips directly; 28 tips require annotation or must remain unlabelled, and one table label conflicts with the cryptic-panel context. Do not infer labels for those records.
-3. Validate discrete clade calls with labelled held-out controls, including clade boundaries and incompletely annotated placement neighborhoods.
+2. Review the cryptic `UNRESOLVED` and `INCORRECT_CALL` leave-one-out records, especially C-V/C-VI/C-VII boundary neighborhoods; keep unannotated tips unlabelled unless independently curated.
+3. Decide whether systematic `WARN` calls in the classical calibration reflect appropriate conservative QC thresholds or require a separately validated confidence policy.
 4. Add alignment leave-one-out validation and panel-pair calibration reports.
 
 ## Repository state
 
-Private development backup: `https://github.com/crodsa/treetip-placer` on `main`. Real data, local analysis outputs, and supplementary input tables must remain outside Git. The fixed-tree clade-assignment interface is implemented but still requires validated local metadata and held-out-clade evaluation before it can be considered production-ready.
+Private development backup: `https://github.com/crodsa/treetip-placer` on `main`. Real data, local analysis outputs, and supplementary input tables must remain outside Git. The fixed-tree clade-assignment interface and its internal validation command are implemented, but local clade-specific calibration must be reviewed before it can be considered production-ready.

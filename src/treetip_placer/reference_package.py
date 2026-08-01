@@ -21,6 +21,8 @@ class PanelReference:
     alignment_path: Path
     tree_sha256: str | None
     alignment_sha256: str | None
+    tip_clades_path: Path | None = None
+    tip_clades_sha256: str | None = None
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,8 @@ def create_paired_reference_package(
     cryptic_tree: str | Path,
     cryptic_alignment: str | Path,
     minimum_distance_separation: float,
+    classical_tip_clades: str | Path | None = None,
+    cryptic_tip_clades: str | Path | None = None,
 ) -> PairedReferencePackage:
     """Create a new manifest with portable paths when files share a drive."""
 
@@ -76,8 +80,8 @@ def create_paired_reference_package(
     if manifest_path.exists():
         raise ValueError(f"Reference package output already exists: {manifest_path}")
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    classical = build_panel_reference(classical_tree, classical_alignment)
-    cryptic = build_panel_reference(cryptic_tree, cryptic_alignment)
+    classical = build_panel_reference(classical_tree, classical_alignment, classical_tip_clades)
+    cryptic = build_panel_reference(cryptic_tree, cryptic_alignment, cryptic_tip_clades)
     validate_panel_structure(classical, "classical")
     validate_panel_structure(cryptic, "cryptic")
     document = {
@@ -91,7 +95,11 @@ def create_paired_reference_package(
     return load_paired_reference_package(manifest_path)
 
 
-def build_panel_reference(tree_path: str | Path, alignment_path: str | Path) -> PanelReference:
+def build_panel_reference(
+    tree_path: str | Path,
+    alignment_path: str | Path,
+    tip_clades_path: str | Path | None = None,
+) -> PanelReference:
     """Resolve existing artifacts and calculate their immutable checksums."""
 
     tree = Path(tree_path).resolve()
@@ -100,18 +108,32 @@ def build_panel_reference(tree_path: str | Path, alignment_path: str | Path) -> 
         raise ValueError(f"Reference tree does not exist: {tree}")
     if not alignment.is_file():
         raise ValueError(f"Reference alignment does not exist: {alignment}")
-    return PanelReference(tree, alignment, sha256(tree), sha256(alignment))
+    tip_clades = Path(tip_clades_path).resolve() if tip_clades_path else None
+    if tip_clades is not None and not tip_clades.is_file():
+        raise ValueError(f"Reference tip-clade metadata does not exist: {tip_clades}")
+    return PanelReference(
+        tree,
+        alignment,
+        sha256(tree),
+        sha256(alignment),
+        tip_clades,
+        sha256(tip_clades) if tip_clades else None,
+    )
 
 
 def serialize_panel_reference(panel: PanelReference, manifest_directory: Path) -> dict[str, str]:
     """Serialize one panel with relative paths when the platform permits it."""
 
-    return {
+    document = {
         "tree": portable_path(panel.tree_path, manifest_directory),
         "alignment": portable_path(panel.alignment_path, manifest_directory),
         "tree_sha256": panel.tree_sha256 or sha256(panel.tree_path),
         "alignment_sha256": panel.alignment_sha256 or sha256(panel.alignment_path),
     }
+    if panel.tip_clades_path is not None:
+        document["tip_clades"] = portable_path(panel.tip_clades_path, manifest_directory)
+        document["tip_clades_sha256"] = panel.tip_clades_sha256 or sha256(panel.tip_clades_path)
+    return document
 
 
 def portable_path(path: Path, manifest_directory: Path) -> str:
@@ -138,7 +160,26 @@ def parse_panel_reference(
     alignment_sha256 = optional_sha256(
         value.get("alignment_sha256"), f"{panel_name}.alignment_sha256"
     )
-    return PanelReference(tree_path, alignment_path, tree_sha256, alignment_sha256)
+    tip_clades_value = value.get("tip_clades")
+    if tip_clades_value is None:
+        tip_clades_path = None
+    else:
+        tip_clades_path = resolve_package_path(
+            tip_clades_value, base_directory, f"{panel_name}.tip_clades"
+        )
+    tip_clades_sha256 = optional_sha256(
+        value.get("tip_clades_sha256"), f"{panel_name}.tip_clades_sha256"
+    )
+    if tip_clades_sha256 is not None and tip_clades_path is None:
+        raise ValueError(f"{panel_name}.tip_clades_sha256 requires {panel_name}.tip_clades")
+    return PanelReference(
+        tree_path,
+        alignment_path,
+        tree_sha256,
+        alignment_sha256,
+        tip_clades_path,
+        tip_clades_sha256,
+    )
 
 
 def resolve_package_path(value: Any, base_directory: Path, field_name: str) -> Path:
@@ -169,8 +210,9 @@ def validate_panel_checksums(panel: PanelReference, panel_name: str) -> None:
     for file_path, expected, artifact in (
         (panel.tree_path, panel.tree_sha256, "tree"),
         (panel.alignment_path, panel.alignment_sha256, "alignment"),
+        (panel.tip_clades_path, panel.tip_clades_sha256, "tip-clade metadata"),
     ):
-        if expected is not None and sha256(file_path) != expected:
+        if file_path is not None and expected is not None and sha256(file_path) != expected:
             raise ValueError(f"{panel_name} {artifact} checksum does not match its reference package")
 
 
@@ -201,7 +243,35 @@ def validate_panel_structure(panel: PanelReference, panel_name: str) -> dict[str
         if missing_in_tree:
             details.append("alignment IDs absent from tree: " + ", ".join(missing_in_tree[:10]))
         raise ValueError(f"{panel_name} tree and alignment IDs differ; " + "; ".join(details))
-    return {"tips": len(tree.tips), "alignment_records": len(alignment.sequences), "columns": alignment.site_count}
+    summary = {"tips": len(tree.tips), "alignment_records": len(alignment.sequences), "columns": alignment.site_count}
+    if panel.tip_clades_path is not None:
+        validate_tip_clade_metadata(panel.tip_clades_path, tree, panel_name)
+        summary["tip_clade_metadata"] = 1
+    return summary
+
+
+def validate_tip_clade_metadata(path: Path, tree: Tree, panel_name: str) -> None:
+    """Validate package metadata without importing placement workflow modules."""
+
+    import csv
+
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        if reader.fieldnames != ["reference_tip_id", "clade"]:
+            raise ValueError(
+                f"The {panel_name} tip-clade TSV must have exactly reference_tip_id and clade columns"
+            )
+        labels: set[str] = set()
+        for row in reader:
+            tip_id = (row.get("reference_tip_id") or "").strip()
+            clade = (row.get("clade") or "").strip()
+            if not tip_id or not clade:
+                raise ValueError(f"The {panel_name} tip-clade TSV contains an empty identifier or clade")
+            if tip_id not in tree.tip_index:
+                raise ValueError(f"The {panel_name} tip-clade TSV names an unknown reference tip '{tip_id}'")
+            if tip_id in labels:
+                raise ValueError(f"The {panel_name} tip-clade TSV repeats reference tip '{tip_id}'")
+            labels.add(tip_id)
 
 
 def sha256(path: Path) -> str:

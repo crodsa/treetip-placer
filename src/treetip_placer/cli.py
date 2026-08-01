@@ -29,7 +29,7 @@ from .clade_assignment import (
 )
 from .models import AlignedSequence, PlacementConfig, PlacementResult, RunMetadata
 from .outputs import render_placed_tree, write_run_outputs
-from .panel_selection import choose_reference_panel, write_panel_selection_outputs
+from .panel_selection import PanelDecision, choose_reference_panel, write_panel_selection_outputs
 from .placement import place_query
 from .reference_package import (
     PanelReference,
@@ -166,6 +166,26 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument(
         "--cryptic-reference-alignment", required=True, help="Cryptic reference fixed-column FASTA alignment."
     )
+
+    clade_calibration = subparsers.add_parser(
+        "calibrate-clade-assignment",
+        help="Validate fixed-tree discrete clade calls with internal leave-one-out controls.",
+    )
+    clade_calibration.add_argument("--tree", required=True, help="Reference branch-length Newick tree.")
+    clade_calibration.add_argument(
+        "--reference-alignment", required=True, help="Reference fixed-column FASTA alignment."
+    )
+    clade_calibration.add_argument(
+        "--tip-clades", required=True, help="Validated TSV with reference_tip_id and clade columns."
+    )
+    clade_calibration.add_argument(
+        "--max-controls-per-clade",
+        type=positive_integer,
+        default=20,
+        help="Maximum deterministic unique-sequence controls selected per clade.",
+    )
+    clade_calibration.add_argument("--output", required=True, help="New, empty output directory.")
+    add_placement_controls(clade_calibration)
     calibrate.add_argument("--mafft", required=True, help="MAFFT executable or wrapper for cross-panel mapping.")
     calibrate.add_argument("--mafft-threads", type=positive_integer, default=1, help="MAFFT threads per mapping.")
     calibrate.add_argument(
@@ -197,6 +217,14 @@ def build_parser() -> argparse.ArgumentParser:
     package.add_argument("--classical-reference-alignment", required=True, help="Classical reference fixed-column FASTA alignment.")
     package.add_argument("--cryptic-tree", required=True, help="Cryptic reference branch-length Newick tree.")
     package.add_argument("--cryptic-reference-alignment", required=True, help="Cryptic reference fixed-column FASTA alignment.")
+    package.add_argument(
+        "--classical-tip-clades",
+        help="Optional validated classical reference_tip_id/clade TSV to checksum in the package.",
+    )
+    package.add_argument(
+        "--cryptic-tip-clades",
+        help="Optional validated cryptic reference_tip_id/clade TSV to checksum in the package.",
+    )
     package.add_argument("--output", required=True, help="New paired reference package JSON path.")
     package.add_argument("--name", help="Optional human-readable package name; defaults to the output filename stem.")
     package.add_argument(
@@ -277,6 +305,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_auto_place(arguments)
         if arguments.command == "calibrate-panel-gate":
             return run_calibrate_panel_gate(arguments)
+        if arguments.command == "calibrate-clade-assignment":
+            return run_calibrate_clade_assignment(arguments)
         if arguments.command == "create-reference-package":
             return run_create_reference_package(arguments)
         if arguments.command == "validate-reference-package":
@@ -410,6 +440,8 @@ def run_create_reference_package(arguments: argparse.Namespace) -> int:
         cryptic_tree=arguments.cryptic_tree,
         cryptic_alignment=arguments.cryptic_reference_alignment,
         minimum_distance_separation=arguments.min_panel_distance_separation,
+        classical_tip_clades=arguments.classical_tip_clades,
+        cryptic_tip_clades=arguments.cryptic_tip_clades,
     )
     logger.event(
         1,
@@ -501,9 +533,11 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     )
     selection_summary = summarize_decisions(decisions)
     logger.event(1, "selection", "Completed conservative panel selection", **selection_summary)
+    classical_tip_clades_path = resolve_tip_clades_path(arguments.classical_tip_clades, package.classical)
+    cryptic_tip_clades_path = resolve_tip_clades_path(arguments.cryptic_tip_clades, package.cryptic)
     tip_clades = {
-        "classical": load_tip_clades(arguments.classical_tip_clades, classical.tree, "classical"),
-        "cryptic": load_tip_clades(arguments.cryptic_tip_clades, cryptic.tree, "cryptic"),
+        "classical": load_tip_clades(classical_tip_clades_path, classical.tree, "classical"),
+        "cryptic": load_tip_clades(cryptic_tip_clades_path, cryptic.tree, "cryptic"),
     }
     clade_assignments = assign_phylogenetic_clades(
         decisions,
@@ -527,13 +561,13 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
         "minimum_distance_separation": minimum_distance_separation,
         "selection_method": "nearest_reference_normalized_hamming_distance",
         "classical_tip_clades_path": (
-            str(Path(arguments.classical_tip_clades).resolve())
-            if arguments.classical_tip_clades
+            str(classical_tip_clades_path)
+            if classical_tip_clades_path
             else None
         ),
         "cryptic_tip_clades_path": (
-            str(Path(arguments.cryptic_tip_clades).resolve())
-            if arguments.cryptic_tip_clades
+            str(cryptic_tip_clades_path)
+            if cryptic_tip_clades_path
             else None
         ),
         "clade_assignment_method": "selected_edge_descendant_tip_labels_with_nearest_reference_fallback",
@@ -547,6 +581,12 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     logger.event(1, "complete", "Automatic panel placement completed", **selection_summary)
     append_final_event(output, logger.events[-1])
     return 0
+
+
+def resolve_tip_clades_path(explicit_path: str | None, panel: PanelReference) -> Path | None:
+    """Prefer an explicit metadata path, otherwise use package-bound metadata."""
+
+    return Path(explicit_path).resolve() if explicit_path else panel.tip_clades_path
 
 
 def resolve_auto_reference_inputs(
@@ -711,6 +751,178 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
     logger.event(1, "complete", "Panel-gate calibration completed")
     append_final_event(output, logger.events[-1])
     return 0
+
+
+def run_calibrate_clade_assignment(arguments: argparse.Namespace) -> int:
+    """Evaluate discrete calls by holding out labelled unique-sequence tips.
+
+    Each control is removed from both the immutable backbone tree and reference
+    alignment before scoring. This is an internal accuracy diagnostic for the
+    fixed-tree clade rule, not topology inference or phylogenetic support.
+    """
+
+    if arguments.bootstrap:
+        raise ValueError("Clade-assignment calibration does not accept bootstrap replicates; use --bootstrap 0")
+    logger = EventLogger(arguments.verbose)
+    logger.event(1, "start", "Starting fixed-tree clade leave-one-out calibration", version=__version__)
+    output = prepare_output_directory(arguments.output)
+    tree = Tree.from_path(arguments.tree, arguments.max_cache_megabytes)
+    if len(tree.tips) < 4:
+        raise ValueError("Clade-assignment calibration requires at least four reference tips")
+    alignment = read_fasta_alignment(arguments.reference_alignment)
+    reference_by_id = {sequence.sample_id: sequence for sequence in alignment.sequences}
+    if set(tree.tip_index) != set(reference_by_id):
+        raise ValueError("Reference tree tips do not exactly match reference alignment IDs")
+    labels = load_tip_clades(arguments.tip_clades, tree, "reference")
+    controls = select_clade_calibration_controls(
+        alignment.sequences, labels, arguments.max_controls_per_clade
+    )
+    if not controls:
+        raise ValueError("No labelled unique-sequence controls are available for clade calibration")
+    logger.event(
+        1,
+        "input",
+        "Selected labelled unique-sequence leave-one-out controls",
+        controls=len(controls),
+        labelled_tips=len(labels),
+        clades=len(set(labels.values())),
+    )
+    config = placement_config_from_arguments(arguments)
+    records: list[dict[str, object]] = []
+    for number, held_out_id in enumerate(controls, start=1):
+        pruned_tree, _ = tree.without_tip(held_out_id)
+        held_out = reference_by_id[held_out_id]
+        pruned_references = tuple(
+            reference_by_id[tip.name or ""] for tip in pruned_tree.tips
+        )
+        result = place_query(held_out, pruned_references, pruned_tree, config)
+        decision = PanelDecision(
+            sample_id=held_out_id,
+            assignment="REFERENCE",
+            decision_status=result.final_status,
+            selected_panel="reference",
+            selected_placement_status=result.final_status,
+            classical_nearest_reference=None,
+            classical_nearest_distance=None,
+            cryptic_nearest_reference=None,
+            cryptic_nearest_distance=None,
+            distance_margin=None,
+            minimum_distance_separation=0.0,
+            findings=("INTERNAL_LEAVE_ONE_OUT_CONTROL",),
+        )
+        remaining_labels = {tip_id: clade for tip_id, clade in labels.items() if tip_id != held_out_id}
+        assignment = assign_phylogenetic_clades(
+            [decision], {"reference": (pruned_tree, (result,))}, {"reference": remaining_labels}
+        )[0]
+        predicted = assignment.phylogenetic_clade
+        truth = labels[held_out_id]
+        if predicted is None:
+            outcome = "UNRESOLVED"
+        elif predicted == truth:
+            outcome = "CORRECT_PASS" if assignment.clade_assignment_status == "PASS" else "CORRECT_WARN"
+        else:
+            outcome = "INCORRECT_CALL"
+        records.append(
+            {
+                "source_sample_id": held_out_id,
+                "truth_clade": truth,
+                "predicted_clade": predicted,
+                "clade_assignment_status": assignment.clade_assignment_status,
+                "assignment_method": assignment.assignment_method,
+                "outcome": outcome,
+                "nearest_reference": assignment.nearest_reference,
+                "supporting_reference_tips": " | ".join(assignment.supporting_reference_tips),
+                "findings": " | ".join(assignment.findings),
+                "placement_status": result.final_status,
+                "placement_edge_id": result.best_fit.edge_id if result.best_fit else None,
+            }
+        )
+        if number == len(controls) or number % 10 == 0:
+            logger.event(2, "calibration", "Completed leave-one-out controls", completed=number, controls=len(controls))
+    write_clade_calibration_outputs(output, records, arguments, tree, alignment)
+    summary = summarize_clade_calibration(records)
+    logger.event(1, "calibration", "Completed fixed-tree clade calibration", **summary)
+    (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
+    logger.event(1, "complete", "Clade-assignment calibration completed")
+    append_final_event(output, logger.events[-1])
+    return 0
+
+
+def select_clade_calibration_controls(
+    sequences: Sequence[AlignedSequence], labels: dict[str, str], maximum_per_clade: int
+) -> tuple[str, ...]:
+    """Select deterministic labelled controls that have no exact sequence duplicate."""
+
+    counts: dict[tuple[str | None, ...], int] = {}
+    for sequence in sequences:
+        counts[sequence.characters] = counts.get(sequence.characters, 0) + 1
+    by_clade: dict[str, list[str]] = {}
+    for sequence in sequences:
+        clade = labels.get(sequence.sample_id)
+        if clade is not None and counts[sequence.characters] == 1:
+            by_clade.setdefault(clade, []).append(sequence.sample_id)
+    return tuple(
+        sample_id
+        for clade in sorted(by_clade)
+        for sample_id in sorted(by_clade[clade])[:maximum_per_clade]
+    )
+
+
+def write_clade_calibration_outputs(
+    output: Path,
+    records: Sequence[dict[str, object]],
+    arguments: argparse.Namespace,
+    tree: Tree,
+    alignment: object,
+) -> None:
+    """Write auditable records, confusion counts, and provenance for clade calibration."""
+
+    fields = [
+        "source_sample_id", "truth_clade", "predicted_clade", "clade_assignment_status",
+        "assignment_method", "outcome", "nearest_reference", "supporting_reference_tips",
+        "findings", "placement_status", "placement_edge_id",
+    ]
+    with (output / "clade_calibration_records.tsv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(records)
+    confusion: dict[tuple[str, str], int] = {}
+    for record in records:
+        key = (str(record["truth_clade"]), str(record["predicted_clade"] or "UNRESOLVED"))
+        confusion[key] = confusion.get(key, 0) + 1
+    with (output / "clade_confusion.tsv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["truth_clade", "predicted_clade", "controls"], delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        for (truth, predicted), controls in sorted(confusion.items()):
+            writer.writerow({"truth_clade": truth, "predicted_clade": predicted, "controls": controls})
+    summary = {
+        "version": __version__,
+        "method": "fixed_tree_leave_one_unique_sequence_out_discrete_clade_assignment",
+        "warning": "Internal validation only: this does not infer a new topology, recalculate phylogenetic support, or estimate external generalization.",
+        "tree_path": str(Path(arguments.tree).resolve()),
+        "tree_sha256": file_sha256(arguments.tree),
+        "reference_alignment_path": str(Path(arguments.reference_alignment).resolve()),
+        "reference_alignment_sha256": file_sha256(arguments.reference_alignment),
+        "tip_clades_path": str(Path(arguments.tip_clades).resolve()),
+        "tip_clades_sha256": file_sha256(arguments.tip_clades),
+        "reference_tips": len(tree.tips),
+        "reference_columns": getattr(alignment, "site_count"),
+        "max_controls_per_clade": arguments.max_controls_per_clade,
+        "summary": summarize_clade_calibration(records),
+    }
+    (output / "clade_calibration_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+
+def summarize_clade_calibration(records: Sequence[dict[str, object]]) -> dict[str, int]:
+    """Count calibration outcomes using stable machine-readable keys."""
+
+    counts: dict[str, int] = {"controls": len(records)}
+    for record in records:
+        outcome = str(record["outcome"]).lower()
+        counts[f"outcome_{outcome}"] = counts.get(f"outcome_{outcome}", 0) + 1
+    return counts
 
 
 def select_unique_sequence_controls(
