@@ -8,7 +8,12 @@ from pathlib import Path
 
 from treetip_placer.panel_selection import PanelDecision
 from treetip_placer.clade_assignment import CladeAssignment
-from treetip_placer.reports import render_tree_figure, render_tree_zoom, write_auto_report
+from treetip_placer.reports import (
+    render_clade_context,
+    render_tree_figure,
+    render_tree_zoom,
+    write_auto_report,
+)
 from treetip_placer.tree import Tree
 
 
@@ -83,7 +88,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn("<svg", figure)
         self.assertIn("query-tip", figure)
         self.assertIn(">query</text>", figure)
-        self.assertNotIn(">reference</text>", figure)
+        self.assertIn(">reference</text>", figure)
 
     def test_placement_zoom_uses_the_selected_query(self) -> None:
         figure = render_tree_zoom(
@@ -94,6 +99,20 @@ class ReportTests(unittest.TestCase):
 
         self.assertIn("placement zoom", figure)
         self.assertIn(">query</text>", figure)
+
+    def test_clade_context_collapses_non_target_pure_subtrees(self) -> None:
+        figure = render_clade_context(
+            "cryptic",
+            Tree.from_newick("((A:0.1,B:0.1):0.1,(query:0.1,(C:0.1,D:0.1):0.1):0.1);"),
+            "query",
+            "C-II",
+            {"A": "C-I", "B": "C-I", "C": "C-III", "D": "C-III"},
+        )
+
+        self.assertIn("C-I (2 tips)", figure)
+        self.assertIn("C-III (2 tips)", figure)
+        self.assertIn(">query</text>", figure)
+        self.assertIn("target C-II expanded", figure)
 
     def test_report_allows_unresolved_clade_assignments(self) -> None:
         root = Path.cwd() / ".treetip-report-unresolved-clade-test"

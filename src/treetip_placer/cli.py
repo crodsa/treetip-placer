@@ -576,7 +576,7 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     write_panel_selection_outputs(output, decisions, selection_metadata)
     write_clade_assignment_outputs(output, clade_assignments, selection_metadata)
     write_selected_panel_trees(output, classical, cryptic, decisions)
-    write_auto_report(output, decisions, selection_metadata, clade_assignments)
+    write_auto_report(output, decisions, selection_metadata, clade_assignments, tip_clades)
     (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
     logger.event(1, "complete", "Automatic panel placement completed", **selection_summary)
     append_final_event(output, logger.events[-1])
