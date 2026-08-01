@@ -225,6 +225,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--cryptic-tip-clades",
         help="Optional validated cryptic reference_tip_id/clade TSV to checksum in the package.",
     )
+    package.add_argument(
+        "--classical-expected-clade-count",
+        type=positive_integer,
+        help="Require a complete classical tip-clade partition with this many distinct labels.",
+    )
+    package.add_argument(
+        "--cryptic-expected-clade-count",
+        type=positive_integer,
+        help="Require a complete cryptic tip-clade partition with this many distinct labels.",
+    )
     package.add_argument("--output", required=True, help="New paired reference package JSON path.")
     package.add_argument("--name", help="Optional human-readable package name; defaults to the output filename stem.")
     package.add_argument(
@@ -442,6 +452,8 @@ def run_create_reference_package(arguments: argparse.Namespace) -> int:
         minimum_distance_separation=arguments.min_panel_distance_separation,
         classical_tip_clades=arguments.classical_tip_clades,
         cryptic_tip_clades=arguments.cryptic_tip_clades,
+        classical_expected_clade_count=arguments.classical_expected_clade_count,
+        cryptic_expected_clade_count=arguments.cryptic_expected_clade_count,
     )
     logger.event(
         1,

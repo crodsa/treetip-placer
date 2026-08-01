@@ -69,6 +69,8 @@ Synthetic report layout preview (no biological data or real identifiers):
 
 Tip-clade metadata is optional and uses a two-column UTF-8 TSV with the exact headers `reference_tip_id` and `clade`. It can be checksummed into the paired reference package and then loads automatically; command-line TSV paths can explicitly override it for a run. If supplied, `place-auto` writes `clade_assignment.tsv` and JSON. A `PASS` clade call has one label among the annotated descendant reference tips on the selected placement edge. Mixed or unlabelled edge labels use a nearest-labelled-reference fallback only as explicit `WARN`; unavailable labels remain `UNRESOLVED`. An `UNRESOLVED` placement never emits a clade label. These are discrete calls on a fixed reference tree, not a new phylogenetic reconstruction or bootstrap calculation.
 
+For the intended ANI-defined seven-clade classical and cryptic panels, derive a complete reference-tip partition with FastBAPS in a supported environment, map its seven clusters to the independently defined ANI labels, and package the resulting TSV with `--classical-expected-clade-count 7 --cryptic-expected-clade-count 7`. The package validator then rejects any missing reference tip or any partition other than exactly seven labels. A query inherits the label from its fixed-tree placement; `WARN` or `UNRESOLVED` still records a placement/QC limitation rather than silently hiding it.
+
 Validate the discrete clade rule without modifying the backbone with deterministic labelled leave-one-unique-sequence-out controls:
 
 ```bash

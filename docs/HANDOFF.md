@@ -63,7 +63,9 @@ Version 0.6.6 improves `report.html` without changing any placement or clade res
 
 Version 0.6.7 inverts the report views following user review: the full tree is now the labelled clade-context overview, and the local placement zoom displays every visible reference tip name. The smoke run `single_cryptic_collapsed_fulltree_smoke_20260801` verified the target C-VII expansion, collapsed C-I labels, and visible reference names in the zoom.
 
-FastBAPS was assessed as a possible reference-panel annotation aid, not as a way to force query calls. It clusters an input alignment and does not perform fixed-tree placement; forcing its clusters to remove `WARN` or `UNRESOLVED` outcomes would be scientifically invalid. The current workstation has neither R nor the R `fastbaps` package, and the current Python port documents Linux/macOS support rather than Windows. If used later, run it in a reproducible supported environment on a core-SNP reference alignment, cross-tab its clusters against independently curated clades, retain the cluster labels as a separate sidecar, and do not replace placement QC or published clade labels automatically.
+Version 0.6.8 adds `expected_clade_count` to each optional panel definition. A complete ANI-defined seven-clade partition can now be required by passing `--classical-expected-clade-count 7 --cryptic-expected-clade-count 7` during reference-package creation. Validation rejects missing tip labels and a label cardinality other than seven; the exact-partition regression tests passed locally.
+
+The target reference definition is seven ANI-defined clades in each panel: seven classical and seven cryptic. FastBAPS can provide a reproducible segmentation of each existing reference alignment/tree, but its automatic optimum must not be misrepresented as an ANI truth. The workflow therefore fixes the intended cardinality at seven, reconciles each FastBAPS cluster to independently defined ANI labels through reference anchors, and rejects a non-bijective or incomplete result for review. The package schema now supports `expected_clade_count`; with `7`, it requires a label for every reference tip and exactly seven distinct labels. Query placement then inherits this fixed reference partition, while `WARN` and `UNRESOLVED` continue to expose a QC or edge-boundary limitation rather than being erased. The current workstation has neither R nor the R `fastbaps` package, and WSL has no installed distribution; the available Python port documents Linux/macOS rather than Windows. Run FastBAPS later in a reproducible supported Linux/macOS environment on the private alignment, retain its output outside Git, and import only the validated tip-clade TSV into the private reference package.
 
 ## Next milestones
 
@@ -73,7 +75,7 @@ FastBAPS was assessed as a possible reference-panel annotation aid, not as a way
 4. Obtain an independent classical test set, especially clade-1/2 boundary isolates, before introducing any clade-specific confidence promotion or suppression rule.
 5. Run broader local clade calibration after independently adding labels for currently singleton/unlabelled cryptic neighborhoods, particularly C-VI.
 6. Add alignment leave-one-out validation and panel-pair calibration reports.
-7. Optionally evaluate FastBAPS in a supported reproducible environment as a secondary core-SNP reference clustering audit; do not use it to force unresolved query clade calls.
+7. Run FastBAPS in a supported reproducible environment for each private reference alignment, constrain/reconcile the result to the seven ANI-defined clades per panel, and create a complete, checksummed reference-tip TSV with `expected_clade_count: 7`.
 
 ## Repository state
 

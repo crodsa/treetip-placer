@@ -123,6 +123,8 @@ class ReferencePackageTests(unittest.TestCase):
                 minimum_distance_separation=0.01,
                 classical_tip_clades=classical_clades,
                 cryptic_tip_clades=cryptic_clades,
+                classical_expected_clade_count=2,
+                cryptic_expected_clade_count=2,
             )
 
             self.assertEqual(package.minimum_distance_separation, 0.01)
@@ -130,6 +132,8 @@ class ReferencePackageTests(unittest.TestCase):
             self.assertEqual(package.cryptic.alignment_sha256, digest(cryptic_alignment))
             self.assertEqual(package.classical.tip_clades_path, classical_clades)
             self.assertEqual(package.cryptic.tip_clades_sha256, digest(cryptic_clades))
+            self.assertEqual(package.classical.expected_clade_count, 2)
+            self.assertEqual(package.cryptic.expected_clade_count, 2)
         finally:
             if root.exists():
                 shutil.rmtree(root)
@@ -154,6 +158,44 @@ class ReferencePackageTests(unittest.TestCase):
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
             with self.assertRaisesRegex(ValueError, "IDs differ"):
+                load_paired_reference_package(manifest_path)
+        finally:
+            if root.exists():
+                shutil.rmtree(root)
+
+    def test_rejects_incomplete_or_wrong_cardinality_exact_partition(self) -> None:
+        root = Path.cwd() / ".treetip-reference-package-test"
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir()
+        try:
+            tree = root / "tree.nwk"
+            alignment = root / "alignment.fasta"
+            tip_clades = root / "tip_clades.tsv"
+            tree.write_text("((A:1,B:1):1,C:1);\n", encoding="utf-8")
+            alignment.write_text(">A\nAAAA\n>B\nAAAT\n>C\nAATT\n", encoding="utf-8")
+            tip_clades.write_text("reference_tip_id\tclade\nA\t1\nB\t2\n", encoding="utf-8")
+            manifest = {
+                "schema_version": 1,
+                "minimum_distance_separation": 0.01,
+                "classical": {
+                    "tree": tree.name,
+                    "alignment": alignment.name,
+                    "tip_clades": tip_clades.name,
+                    "expected_clade_count": 2,
+                },
+                "cryptic": {"tree": tree.name, "alignment": alignment.name},
+            }
+            manifest_path = root / "paired_reference.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "every reference tip"):
+                load_paired_reference_package(manifest_path)
+
+            tip_clades.write_text(
+                "reference_tip_id\tclade\nA\t1\nB\t1\nC\t1\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ValueError, "expected 2 clades"):
                 load_paired_reference_package(manifest_path)
         finally:
             if root.exists():
