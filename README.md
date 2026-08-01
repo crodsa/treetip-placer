@@ -54,12 +54,16 @@ treetip place-auto \
   --reference-package paired_reference.json \
   --query-fasta uploaded_queries.fasta \
   --mafft /path/to/mafft \
+  --classical-tip-clades classical_tip_clades.tsv \
+  --cryptic-tip-clades cryptic_tip_clades.tsv \
   --output automatic_run \
   --bootstrap 100 \
   --verbose
 ```
 
 The result is deliberately conservative. `panel_assignment.tsv` contains one `CLASSICAL`, `CRYPTIC`, `AMBIGUOUS`, or `UNRESOLVED` call per query. A call is made only when its nearest-reference distance is better than the other panel by `--min-panel-distance-separation` (default `0.01`). This provisional default was calibrated for the current paired panels and must be recalibrated with known classical, cryptic, and boundary samples whenever either reference package changes. `report.html` is a human-readable index with direct artifact links. For every panel assigned to one or more queries, it shows the complete selected tree for context and a placement-branch zoom for each assigned query; `selected_trees/` contains one directly drawable Newick tree per selected panel; `panels/` retains both complete, auditable placement runs.
+
+Tip-clade metadata is optional and uses a two-column UTF-8 TSV with the exact headers `reference_tip_id` and `clade`. If supplied, `place-auto` writes `clade_assignment.tsv` and JSON. A `PASS` clade call has one label among the annotated descendant reference tips on the selected placement edge. Mixed, missing, or unavailable labels remain `UNRESOLVED`; a nearest-labelled-reference fallback is explicitly marked `WARN`. These are discrete calls on a fixed reference tree, not a new phylogenetic reconstruction or bootstrap calculation.
 
 Calibrate the paired-panel distance gate with internal leave-one-unique-sequence-out controls:
 

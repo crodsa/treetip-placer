@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from treetip_placer.panel_selection import PanelDecision
+from treetip_placer.clade_assignment import CladeAssignment
 from treetip_placer.reports import render_tree_figure, render_tree_zoom, write_auto_report
 from treetip_placer.tree import Tree
 
@@ -44,6 +45,18 @@ class ReportTests(unittest.TestCase):
                 root,
                 [decision],
                 {"minimum_distance_separation": 0.01, "reference_package_path": "package.json"},
+                [
+                    CladeAssignment(
+                        sample_id="sample<unsafe>",
+                        selected_panel="cryptic",
+                        phylogenetic_clade="C-II",
+                        clade_assignment_status="PASS",
+                        assignment_method="test",
+                        nearest_reference="cryptic_reference",
+                        supporting_reference_tips=("cryptic_reference",),
+                        findings=(),
+                    )
+                ],
             )
             contents = (root / "report.html").read_text(encoding="utf-8")
 
@@ -54,6 +67,8 @@ class ReportTests(unittest.TestCase):
             self.assertNotIn("Classical selected tree", contents)
             self.assertIn("sample&lt;unsafe&gt; placement zoom", contents)
             self.assertEqual(contents.count('class="dendrogram"'), 2)
+            self.assertIn("C-II", contents)
+            self.assertIn("clade_assignment.tsv", contents)
         finally:
             if root.exists():
                 shutil.rmtree(root)
@@ -79,6 +94,42 @@ class ReportTests(unittest.TestCase):
 
         self.assertIn("placement zoom", figure)
         self.assertIn(">query</text>", figure)
+
+    def test_report_allows_unresolved_clade_assignments(self) -> None:
+        root = Path.cwd() / ".treetip-report-unresolved-clade-test"
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir()
+        try:
+            decision = PanelDecision(
+                sample_id="query",
+                assignment="CRYPTIC",
+                decision_status="PASS",
+                selected_panel="cryptic",
+                selected_placement_status="PASS",
+                classical_nearest_reference="classical",
+                classical_nearest_distance=0.2,
+                cryptic_nearest_reference="cryptic",
+                cryptic_nearest_distance=0.01,
+                distance_margin=0.19,
+                minimum_distance_separation=0.01,
+                findings=(),
+            )
+            unresolved = CladeAssignment(
+                sample_id="query",
+                selected_panel="cryptic",
+                phylogenetic_clade=None,
+                clade_assignment_status="UNRESOLVED",
+                assignment_method=None,
+                nearest_reference="cryptic",
+                supporting_reference_tips=(),
+                findings=("NO_TIP_CLADE_METADATA_FOR_SELECTED_PANEL",),
+            )
+            write_auto_report(root, [decision], {"minimum_distance_separation": 0.01}, [unresolved])
+            self.assertIn("UNRESOLVED", (root / "report.html").read_text(encoding="utf-8"))
+        finally:
+            if root.exists():
+                shutil.rmtree(root)
 
 
 if __name__ == "__main__":

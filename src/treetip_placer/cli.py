@@ -22,6 +22,11 @@ from .alignment import (
     require_matching_alignment_widths,
     write_fasta_records,
 )
+from .clade_assignment import (
+    assign_phylogenetic_clades,
+    load_tip_clades,
+    write_clade_assignment_outputs,
+)
 from .models import AlignedSequence, PlacementConfig, PlacementResult, RunMetadata
 from .outputs import render_placed_tree, write_run_outputs
 from .panel_selection import choose_reference_panel, write_panel_selection_outputs
@@ -131,6 +136,14 @@ def build_parser() -> argparse.ArgumentParser:
     auto.add_argument("--classical-reference-alignment", help="Classical reference fixed-column FASTA alignment.")
     auto.add_argument("--cryptic-tree", help="Cryptic reference branch-length Newick tree.")
     auto.add_argument("--cryptic-reference-alignment", help="Cryptic reference fixed-column FASTA alignment.")
+    auto.add_argument(
+        "--classical-tip-clades",
+        help="Optional TSV with reference_tip_id and clade columns for classical fixed-tree clade calls.",
+    )
+    auto.add_argument(
+        "--cryptic-tip-clades",
+        help="Optional TSV with reference_tip_id and clade columns for cryptic fixed-tree clade calls.",
+    )
     auto.add_argument("--query-fasta", required=True, help="Raw query FASTA; mapped separately to both panels.")
     auto.add_argument("--mafft", required=True, help="MAFFT executable or wrapper for --add --keeplength mapping.")
     auto.add_argument("--mafft-threads", type=positive_integer, default=1, help="MAFFT threads per mapping.")
@@ -488,6 +501,20 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     )
     selection_summary = summarize_decisions(decisions)
     logger.event(1, "selection", "Completed conservative panel selection", **selection_summary)
+    tip_clades = {
+        "classical": load_tip_clades(arguments.classical_tip_clades, classical.tree, "classical"),
+        "cryptic": load_tip_clades(arguments.cryptic_tip_clades, cryptic.tree, "cryptic"),
+    }
+    clade_assignments = assign_phylogenetic_clades(
+        decisions,
+        {
+            "classical": (classical.tree, classical.results),
+            "cryptic": (cryptic.tree, cryptic.results),
+        },
+        tip_clades,
+    )
+    clade_summary = summarize_clade_assignments(clade_assignments)
+    logger.event(1, "clade_assignment", "Completed fixed-tree clade assignment", **clade_summary)
     selection_metadata = {
         "version": __version__,
         "query_fasta_path": str(Path(arguments.query_fasta).resolve()),
@@ -499,11 +526,23 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
         "cryptic_reference_alignment_path": str(package.cryptic.alignment_path),
         "minimum_distance_separation": minimum_distance_separation,
         "selection_method": "nearest_reference_normalized_hamming_distance",
+        "classical_tip_clades_path": (
+            str(Path(arguments.classical_tip_clades).resolve())
+            if arguments.classical_tip_clades
+            else None
+        ),
+        "cryptic_tip_clades_path": (
+            str(Path(arguments.cryptic_tip_clades).resolve())
+            if arguments.cryptic_tip_clades
+            else None
+        ),
+        "clade_assignment_method": "selected_edge_descendant_tip_labels_with_nearest_reference_fallback",
         "warning": "Distance-separation thresholds require empirical calibration for each pair of panels.",
     }
     write_panel_selection_outputs(output, decisions, selection_metadata)
+    write_clade_assignment_outputs(output, clade_assignments, selection_metadata)
     write_selected_panel_trees(output, classical, cryptic, decisions)
-    write_auto_report(output, decisions, selection_metadata)
+    write_auto_report(output, decisions, selection_metadata, clade_assignments)
     (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
     logger.event(1, "complete", "Automatic panel placement completed", **selection_summary)
     append_final_event(output, logger.events[-1])
@@ -975,6 +1014,19 @@ def summarize_decisions(decisions: Sequence[object]) -> dict[str, int]:
         assignment = getattr(decision, "assignment")
         counts[assignment] = counts.get(assignment, 0) + 1
     return {f"queries_{label.lower()}": count for label, count in sorted(counts.items())}
+
+
+def summarize_clade_assignments(assignments: Sequence[object]) -> dict[str, int]:
+    """Count durable fixed-tree clade-assignment status labels."""
+
+    counts: dict[str, int] = {}
+    for assignment in assignments:
+        status = str(getattr(assignment, "clade_assignment_status"))
+        counts[status] = counts.get(status, 0) + 1
+    return {
+        f"clade_assignments_{status.lower()}": count
+        for status, count in sorted(counts.items())
+    }
 
 
 def placement_config_from_arguments(arguments: argparse.Namespace) -> PlacementConfig:

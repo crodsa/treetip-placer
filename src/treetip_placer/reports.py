@@ -6,6 +6,7 @@ from html import escape
 from pathlib import Path
 from typing import Mapping, Sequence
 
+from .clade_assignment import CladeAssignment
 from .panel_selection import PanelDecision
 from .tree import Node, Tree
 
@@ -14,6 +15,7 @@ def write_auto_report(
     output_directory: str | Path,
     decisions: Sequence[PanelDecision],
     metadata: Mapping[str, object],
+    clade_assignments: Sequence[CladeAssignment] = (),
 ) -> None:
     """Write a self-contained HTML summary without replacing tabular outputs."""
 
@@ -25,7 +27,11 @@ def write_auto_report(
         f"<li><strong>{escape(label)}</strong>: {count}</li>"
         for label, count in sorted(assignments.items())
     )
-    rows = "\n".join(render_decision_row(decision) for decision in decisions)
+    clade_by_sample = {assignment.sample_id: assignment for assignment in clade_assignments}
+    rows = "\n".join(
+        render_decision_row(decision, clade_by_sample.get(decision.sample_id))
+        for decision in decisions
+    )
     package = metadata.get("reference_package_path") or "Explicit command-line reference paths"
     threshold = format(float(metadata["minimum_distance_separation"]), ".12g")
     document = f"""<!doctype html>
@@ -58,13 +64,15 @@ def write_auto_report(
   {render_selected_tree_figures(root, decisions)}
   <h2>Queries</h2>
   <table>
-    <thead><tr><th>Sample</th><th>Assignment</th><th>Decision</th><th>Classical nearest distance</th><th>Cryptic nearest distance</th><th>Margin</th><th>Selected placement</th><th>Findings</th></tr></thead>
+    <thead><tr><th>Sample</th><th>Assignment</th><th>Phylogenetic clade</th><th>Clade status</th><th>Decision</th><th>Classical nearest distance</th><th>Cryptic nearest distance</th><th>Margin</th><th>Selected placement</th><th>Findings</th></tr></thead>
     <tbody>{rows}</tbody>
   </table>
   <h2>Artifacts</h2>
   <ul>
     <li><a href="panel_assignment.tsv">Panel assignments (TSV)</a></li>
     <li><a href="panel_assignment.json">Panel assignments (JSON)</a></li>
+    <li><a href="clade_assignment.tsv">Fixed-tree clade assignments (TSV)</a></li>
+    <li><a href="clade_assignment.json">Fixed-tree clade assignments (JSON)</a></li>
     <li><a href="selected_trees/classical.selected_placed_tree.nwk">Selected classical placed tree (Newick)</a></li>
     <li><a href="selected_trees/cryptic.selected_placed_tree.nwk">Selected cryptic placed tree (Newick)</a></li>
     <li><a href="panels/classical/placements/placements.tsv">Classical placement details (TSV)</a></li>
@@ -76,12 +84,17 @@ def write_auto_report(
     (root / "report.html").write_text(document, encoding="utf-8")
 
 
-def render_decision_row(decision: PanelDecision) -> str:
+def render_decision_row(
+    decision: PanelDecision,
+    clade_assignment: CladeAssignment | None = None,
+) -> str:
     """Render one escaped result row with stable numeric formatting."""
 
     values = (
         decision.sample_id,
         decision.assignment,
+        clade_assignment.phylogenetic_clade if clade_assignment and clade_assignment.phylogenetic_clade else "",
+        clade_assignment.clade_assignment_status if clade_assignment else "",
         decision.decision_status,
         format_value(decision.classical_nearest_distance),
         format_value(decision.cryptic_nearest_distance),

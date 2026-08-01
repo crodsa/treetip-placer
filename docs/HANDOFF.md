@@ -48,10 +48,10 @@ Automatic runs now include a self-contained `report.html` index beside the autho
 ## Next milestones
 
 1. Build a labelled classical/cryptic calibration set to estimate the automatic panel-selection threshold and boundary error rate.
-2. Finish the discrete fixed-tree clade-assignment workflow. `src/treetip_placer/clade_assignment.py` is an unintegrated development module that defines strict tip-clade TSV loading and conservative assignment from labels below the selected placement edge. It still needs CLI options, output/report integration, tests, and user-facing documentation.
-3. Create non-versioned tip-clade TSV metadata for the local production panels. The inspected cryptic supplementary table matched 106 of 134 strict-cryptic reference tips directly; 28 tips require annotation or must remain unlabelled, and one table label conflicts with the cryptic-panel context. Do not infer labels for those records.
+2. Create non-versioned tip-clade TSV metadata for the local production panels. The inspected cryptic supplementary table matched 106 of 134 strict-cryptic reference tips directly; 28 tips require annotation or must remain unlabelled, and one table label conflicts with the cryptic-panel context. Do not infer labels for those records.
+3. Validate discrete clade calls with labelled held-out controls, including clade boundaries and incompletely annotated placement neighborhoods.
 4. Add alignment leave-one-out validation and panel-pair calibration reports.
 
 ## Repository state
 
-Private development backup: `https://github.com/crodsa/treetip-placer` on `main`. Real data, local analysis outputs, and supplementary input tables must remain outside Git. The next commit should preserve the explicitly incomplete clade-assignment module as a development checkpoint, not describe it as a completed public feature.
+Private development backup: `https://github.com/crodsa/treetip-placer` on `main`. Real data, local analysis outputs, and supplementary input tables must remain outside Git. The fixed-tree clade-assignment interface is implemented but still requires validated local metadata and held-out-clade evaluation before it can be considered production-ready.
