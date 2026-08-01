@@ -62,14 +62,15 @@ class ReportTests(unittest.TestCase):
                         findings=(),
                     )
                 ],
+                {"cryptic": {"cryptic_reference": "C-II"}},
             )
             contents = (root / "report.html").read_text(encoding="utf-8")
 
             self.assertIn("sample&lt;unsafe&gt;", contents)
             self.assertIn("panel_assignment.tsv", contents)
             self.assertIn("cryptic.selected_placed_tree.nwk", contents)
-            self.assertIn("Cryptic selected tree", contents)
-            self.assertNotIn("Classical selected tree", contents)
+            self.assertIn("full clade-context tree", contents)
+            self.assertNotIn("Classical panel", contents)
             self.assertIn("sample&lt;unsafe&gt; placement zoom", contents)
             self.assertEqual(contents.count('class="dendrogram"'), 2)
             self.assertIn("C-II", contents)
@@ -99,6 +100,7 @@ class ReportTests(unittest.TestCase):
 
         self.assertIn("placement zoom", figure)
         self.assertIn(">query</text>", figure)
+        self.assertIn(">reference</text>", figure)
 
     def test_clade_context_collapses_non_target_pure_subtrees(self) -> None:
         figure = render_clade_context(
@@ -113,6 +115,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn("C-III (2 tips)", figure)
         self.assertIn(">query</text>", figure)
         self.assertIn("target C-II expanded", figure)
+        self.assertIn("full clade-context tree", figure)
 
     def test_report_allows_unresolved_clade_assignments(self) -> None:
         root = Path.cwd() / ".treetip-report-unresolved-clade-test"

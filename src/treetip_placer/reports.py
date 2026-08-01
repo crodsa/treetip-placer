@@ -145,9 +145,7 @@ def render_selected_tree_figures(
             figures.append(f"<p><strong>{escape(panel.title())}</strong>: selected tree is unavailable.</p>")
             continue
         tree = Tree.from_path(tree_path)
-        figures.append(render_tree_figure(panel, tree, highlighted[panel], show_tip_names=True))
         for sample_id in sorted(highlighted[panel]):
-            figures.append(render_tree_zoom(panel, tree, sample_id))
             assignment = clade_by_sample.get(sample_id)
             figures.append(
                 render_clade_context(
@@ -158,6 +156,7 @@ def render_selected_tree_figures(
                     tip_clades.get(panel, {}),
                 )
             )
+            figures.append(render_tree_zoom(panel, tree, sample_id))
     return "\n".join(figures)
 
 
@@ -254,7 +253,7 @@ def render_tree_zoom(panel: str, tree: Tree, sample_id: str) -> str:
 
     width = 1100
     left = 28
-    right = 230
+    right = 330
     top = 28
     row_height = max(3.0, min(9.0, 780.0 / max(len(tree.tips), 1)))
     height = int(top * 2 + max(len(tree.tips) - 1, 1) * row_height + 24)
@@ -300,16 +299,27 @@ def render_tree_zoom(panel: str, tree: Tree, sample_id: str) -> str:
 
     focus_x = x_position(focus_tip)
     focus_y = y_positions[focus_tip.node_id]
-    crop_width = min(width, 650)
-    crop_left = max(0.0, min(focus_x - crop_width + 180, width - crop_width))
+    crop_width = min(width, 750)
+    crop_left = max(0.0, min(focus_x - crop_width + 260, width - crop_width))
     crop_height = min(float(height), 180.0)
     crop_top = max(0.0, min(focus_y - crop_height / 2, height - crop_height))
+    labels: list[str] = []
+    for tip in tree.tips:
+        if tip.name == sample_id:
+            continue
+        y = y_positions[tip.node_id]
+        if crop_top <= y <= crop_top + crop_height:
+            x = x_position(tip)
+            labels.append(
+                f'<text x="{x + 4:.3f}" y="{y + 2.8:.3f}" class="reference-label">{escape(tip.name or "")}</text>'
+            )
     label = escape(sample_id)
     return f"""<figure>
   <figcaption><strong>{label} placement zoom</strong> ({escape(panel.title())} panel)</figcaption>
   <svg class="dendrogram" viewBox="{crop_left:.3f} {crop_top:.3f} {crop_width:.3f} {crop_height:.3f}" role="img" aria-label="{label} placement zoom">
-    <style>.branch {{ stroke: #64748b; stroke-width: 0.8; fill: none; }} .query-tip {{ fill: #ea580c; }} .query-label {{ fill: #9a3412; font: 12px system-ui, sans-serif; font-weight: 700; }}</style>
+    <style>.branch {{ stroke: #64748b; stroke-width: 0.8; fill: none; }} .query-tip {{ fill: #ea580c; }} .query-label {{ fill: #9a3412; font: 12px system-ui, sans-serif; font-weight: 700; }} .reference-label {{ fill: #334155; font: 10px system-ui, sans-serif; }}</style>
     {''.join(lines)}
+    {''.join(labels)}
     <circle cx="{focus_x:.3f}" cy="{focus_y:.3f}" r="4" class="query-tip"/>
     <text x="{focus_x + 7:.3f}" y="{focus_y + 4:.3f}" class="query-label">{label}</text>
   </svg>
@@ -447,8 +457,8 @@ def render_clade_context(
     label = escape(sample_id)
     clade = escape(target_clade)
     return f"""<figure>
-  <figcaption><strong>{label} clade-context overview</strong> (target {clade} expanded; other pure clade subtrees collapsed and labelled)</figcaption>
-  <svg class="dendrogram" viewBox="0 0 {width} {height}" role="img" aria-label="{label} clade-context overview">
+  <figcaption><strong>{label} full clade-context tree</strong> (target {clade} expanded; other pure clade subtrees collapsed and labelled)</figcaption>
+  <svg class="dendrogram" viewBox="0 0 {width} {height}" role="img" aria-label="{label} full clade-context tree">
     <style>.branch {{ stroke: #64748b; stroke-width: 0.9; fill: none; }} .query-tip {{ fill: #ea580c; }} .query-label {{ fill: #9a3412; font: 13px system-ui, sans-serif; font-weight: 700; }} .collapsed-tip {{ fill: #2563eb; }} .collapsed-label {{ fill: #1e3a8a; font: 12px system-ui, sans-serif; font-weight: 650; }} .context-tip-label {{ fill: #334155; font: 11px system-ui, sans-serif; }}</style>
     {''.join(lines)}
     {''.join(labels)}

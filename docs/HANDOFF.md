@@ -61,6 +61,10 @@ Version 0.6.5 extends `clade_calibration_records.tsv` with per-control coverage,
 
 Version 0.6.6 improves `report.html` without changing any placement or clade result. The complete selected-tree SVG now displays every reference tip name. Each query additionally has a topology-preserving clade-context overview: the query clade stays expanded, while a non-target subtree is collapsed only when its annotated descendant tips all share one clade; it is labelled `Clade (n tips)`. Unlabelled pure subtrees are displayed as `Unlabelled (n tips)`. The local run `single_cryptic_clade_context_smoke_20260801` verified the full-tip labels, clade context, collapsed labels, and target C-VII expansion.
 
+Version 0.6.7 inverts the report views following user review: the full tree is now the labelled clade-context overview, and the local placement zoom displays every visible reference tip name. The smoke run `single_cryptic_collapsed_fulltree_smoke_20260801` verified the target C-VII expansion, collapsed C-I labels, and visible reference names in the zoom.
+
+FastBAPS was assessed as a possible reference-panel annotation aid, not as a way to force query calls. It clusters an input alignment and does not perform fixed-tree placement; forcing its clusters to remove `WARN` or `UNRESOLVED` outcomes would be scientifically invalid. The current workstation has neither R nor the R `fastbaps` package, and the current Python port documents Linux/macOS support rather than Windows. If used later, run it in a reproducible supported environment on a core-SNP reference alignment, cross-tab its clusters against independently curated clades, retain the cluster labels as a separate sidecar, and do not replace placement QC or published clade labels automatically.
+
 ## Next milestones
 
 1. Build a labelled classical/cryptic calibration set to estimate the automatic panel-selection threshold and boundary error rate.
@@ -69,6 +73,7 @@ Version 0.6.6 improves `report.html` without changing any placement or clade res
 4. Obtain an independent classical test set, especially clade-1/2 boundary isolates, before introducing any clade-specific confidence promotion or suppression rule.
 5. Run broader local clade calibration after independently adding labels for currently singleton/unlabelled cryptic neighborhoods, particularly C-VI.
 6. Add alignment leave-one-out validation and panel-pair calibration reports.
+7. Optionally evaluate FastBAPS in a supported reproducible environment as a secondary core-SNP reference clustering audit; do not use it to force unresolved query clade calls.
 
 ## Repository state
 
