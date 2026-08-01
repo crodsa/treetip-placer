@@ -78,7 +78,7 @@ treetip calibrate-clade-assignment \
   --verbose
 ```
 
-For each control, the command removes its tip from the fixed tree and its sequence from the reference alignment, then applies the production placement and discrete clade rule. A clade with only one labelled reference tip is excluded because its label cannot remain after holdout; `clade_calibration_exclusions.tsv` records that fact. `clade_calibration_records.tsv`, `clade_confusion.tsv`, and `clade_calibration_summary.json` distinguish `CORRECT_PASS`, `CORRECT_WARN`, `INCORRECT_CALL`, and `UNRESOLVED`. This is internal validation only; it does not recalculate a topology or phylogenetic support.
+For each control, the command removes its tip from the fixed tree and its sequence from the reference alignment, then applies the production placement and discrete clade rule. A clade with only one labelled reference tip is excluded because its label cannot remain after holdout; `clade_calibration_exclusions.tsv` records that fact. `clade_calibration_records.tsv` includes coverage, comparable sites, nearest-reference distance, relative fit weight, objective, and RMSE for every control; `clade_confusion.tsv` and `clade_calibration_summary.json` summarize `CORRECT_PASS`, `CORRECT_WARN`, `INCORRECT_CALL`, and `UNRESOLVED` overall and by truth clade. This is internal validation only; it does not recalculate a topology or phylogenetic support.
 
 Calibrate the paired-panel distance gate with internal leave-one-unique-sequence-out controls:
 

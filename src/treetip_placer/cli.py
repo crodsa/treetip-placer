@@ -837,6 +837,14 @@ def run_calibrate_clade_assignment(arguments: argparse.Namespace) -> int:
                 "findings": " | ".join(assignment.findings),
                 "placement_status": result.final_status,
                 "placement_edge_id": result.best_fit.edge_id if result.best_fit else None,
+                "coverage": result.qc.coverage,
+                "comparable_sites": result.qc.comparable_sites,
+                "nearest_reference_distance": result.qc.nearest_distance,
+                "relative_fit_weight": (
+                    result.best_fit.relative_fit_weight if result.best_fit else None
+                ),
+                "best_objective": result.best_fit.objective if result.best_fit else None,
+                "best_rmse": result.best_fit.rmse if result.best_fit else None,
             }
         )
         if number == len(controls) or number % 10 == 0:
@@ -897,7 +905,8 @@ def write_clade_calibration_outputs(
     fields = [
         "source_sample_id", "truth_clade", "predicted_clade", "clade_assignment_status",
         "assignment_method", "outcome", "nearest_reference", "supporting_reference_tips",
-        "findings", "placement_status", "placement_edge_id",
+        "findings", "placement_status", "placement_edge_id", "coverage", "comparable_sites",
+        "nearest_reference_distance", "relative_fit_weight", "best_objective", "best_rmse",
     ]
     with (output / "clade_calibration_records.tsv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
@@ -947,6 +956,7 @@ def write_clade_calibration_outputs(
             clade for clade, count in label_counts.items() if count < 2
         ),
         "summary": summarize_clade_calibration(records),
+        "summary_by_truth_clade": summarize_clade_calibration_by_truth(records),
     }
     (output / "clade_calibration_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -961,6 +971,22 @@ def summarize_clade_calibration(records: Sequence[dict[str, object]]) -> dict[st
         outcome = str(record["outcome"]).lower()
         counts[f"outcome_{outcome}"] = counts.get(f"outcome_{outcome}", 0) + 1
     return counts
+
+
+def summarize_clade_calibration_by_truth(
+    records: Sequence[dict[str, object]],
+) -> dict[str, dict[str, int]]:
+    """Count diagnostic outcomes by held-out reference clade."""
+
+    summary: dict[str, dict[str, int]] = {}
+    for record in records:
+        clade = str(record["truth_clade"])
+        outcome = str(record["outcome"]).lower()
+        counts = summary.setdefault(clade, {"controls": 0})
+        counts["controls"] += 1
+        key = f"outcome_{outcome}"
+        counts[key] = counts.get(key, 0) + 1
+    return {clade: summary[clade] for clade in sorted(summary)}
 
 
 def select_unique_sequence_controls(

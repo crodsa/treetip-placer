@@ -76,7 +76,9 @@ class CliTests(unittest.TestCase):
                 ]
             )
             self.assertEqual(exit_code, 0)
-            self.assertIn("truth_clade", (output / "clade_calibration_records.tsv").read_text(encoding="utf-8"))
+            records = (output / "clade_calibration_records.tsv").read_text(encoding="utf-8")
+            self.assertIn("truth_clade", records)
+            self.assertIn("relative_fit_weight", records)
             self.assertTrue((output / "clade_confusion.tsv").is_file())
             self.assertTrue((output / "clade_calibration_exclusions.tsv").is_file())
             self.assertTrue((output / "clade_calibration_summary.json").is_file())

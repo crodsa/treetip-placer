@@ -57,13 +57,16 @@ Version 0.6.3 also prevents any underlying `UNRESOLVED` placement from emitting 
 
 Version 0.6.4 changes the no-bootstrap interpretation of a diffuse WLS relative-fit weight from `UNRESOLVED` to explicit `WARN`. The weight is a heuristic, not phylogenetic support; when no bootstrap was requested, it must not silently make the tool unusable. Requested bootstrap support below the configured threshold remains `UNRESOLVED`. This policy was smoke-tested with the package-bound metadata at `single_cryptic_package_metadata_warn_smoke_20260801`: the query was selected as `CRYPTIC` (nearest-distance margin 0.04313) and received `C-VII` only as a `WARN` nearest-labelled-reference fallback on a mixed edge. The report and sidecar retain all reasons.
 
+Version 0.6.5 extends `clade_calibration_records.tsv` with per-control coverage, comparable sites, nearest-reference distance, relative fit weight, objective, and RMSE; its JSON summary now also reports outcomes by truth clade. Exhaustive local leave-one-out calibration was retained outside Git under `classical_clade_calibration_full_metrics_20260801` and `cryptic_clade_calibration_full_metrics_20260801`. The classical panel evaluated all 200 controls: 194 `CORRECT_WARN` and six `INCORRECT_CALL` (97.0% retained-call agreement), all involving clades 1/2, with two clade-1 controls placing in clade 5. The cryptic panel evaluated 53 eligible unique-sequence controls: 48 `CORRECT_WARN` and five `UNRESOLVED`, with no incorrect calls. C-VI remains excluded because it has only one labelled tip; the 28 unlabelled cryptic tips and exact-sequence duplicates reduce the eligible control count. Distance, relative-fit weight, and RMSE did not supply a defensible simple threshold for suppressing only the six classical conflicts, so no unvalidated rule was added.
+
 ## Next milestones
 
 1. Build a labelled classical/cryptic calibration set to estimate the automatic panel-selection threshold and boundary error rate.
 2. Review the cryptic `UNRESOLVED` leave-one-out records, especially C-V/C-VII boundary neighborhoods; keep unannotated tips unlabelled unless independently curated. C-VI requires at least one additional independently curated labelled reference before internal leave-one-out evaluation is possible.
 3. Decide whether systematic `WARN` calls in the classical calibration reflect appropriate conservative QC thresholds or require a separately validated confidence policy.
-4. Run broader local clade calibration after independently adding labels for currently singleton/unlabelled cryptic neighborhoods, particularly C-VI.
-5. Add alignment leave-one-out validation and panel-pair calibration reports.
+4. Obtain an independent classical test set, especially clade-1/2 boundary isolates, before introducing any clade-specific confidence promotion or suppression rule.
+5. Run broader local clade calibration after independently adding labels for currently singleton/unlabelled cryptic neighborhoods, particularly C-VI.
+6. Add alignment leave-one-out validation and panel-pair calibration reports.
 
 ## Repository state
 
