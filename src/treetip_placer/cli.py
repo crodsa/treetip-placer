@@ -31,6 +31,13 @@ from .models import AlignedSequence, PlacementConfig, PlacementResult, RunMetada
 from .outputs import render_placed_tree, write_run_outputs
 from .panel_selection import PanelDecision, choose_reference_panel, write_panel_selection_outputs
 from .placement import place_query
+from .placement_accuracy import (
+    ACCURACY_RECORD_COLUMNS,
+    build_accuracy_record,
+    grade_placement_accuracy,
+    hop_distribution,
+    summarize_placement_accuracy,
+)
 from .reference_package import (
     PanelReference,
     PairedReferencePackage,
@@ -186,6 +193,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     clade_calibration.add_argument("--output", required=True, help="New, empty output directory.")
     add_placement_controls(clade_calibration)
+
+    accuracy = subparsers.add_parser(
+        "calibrate-placement-accuracy",
+        help="Measure whether leave-one-out placement recovers a held-out reference tip's position.",
+    )
+    accuracy.add_argument("--tree", required=True, help="Reference branch-length Newick tree.")
+    accuracy.add_argument(
+        "--reference-alignment", required=True, help="Reference fixed-column FASTA alignment."
+    )
+    accuracy.add_argument(
+        "--max-controls",
+        type=positive_integer,
+        default=50,
+        help="Maximum deterministic unique-sequence controls evaluated.",
+    )
+    accuracy.add_argument(
+        "--near-hop-threshold",
+        type=positive_integer,
+        default=2,
+        help="Largest edge-hop distance still reported as NEAR; provisional and uncalibrated.",
+    )
+    accuracy.add_argument("--output", required=True, help="New, empty output directory.")
+    add_placement_controls(accuracy)
+
     calibrate.add_argument("--mafft", required=True, help="MAFFT executable or wrapper for cross-panel mapping.")
     calibrate.add_argument("--mafft-threads", type=positive_integer, default=1, help="MAFFT threads per mapping.")
     calibrate.add_argument(
@@ -317,6 +348,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_calibrate_panel_gate(arguments)
         if arguments.command == "calibrate-clade-assignment":
             return run_calibrate_clade_assignment(arguments)
+        if arguments.command == "calibrate-placement-accuracy":
+            return run_calibrate_placement_accuracy(arguments)
         if arguments.command == "create-reference-package":
             return run_create_reference_package(arguments)
         if arguments.command == "validate-reference-package":
@@ -999,6 +1032,112 @@ def summarize_clade_calibration_by_truth(
         key = f"outcome_{outcome}"
         counts[key] = counts.get(key, 0) + 1
     return {clade: summary[clade] for clade in sorted(summary)}
+
+
+def run_calibrate_placement_accuracy(arguments: argparse.Namespace) -> int:
+    """Measure whether leave-one-out placement recovers a held-out tip's position.
+
+    Each control is removed from both the immutable backbone tree and the
+    reference alignment, placed back with the production placement path, and
+    graded in edge hops against its recorded attachment. This is an internal
+    topology diagnostic, not phylogenetic support or external validation.
+    """
+
+    logger = EventLogger(arguments.verbose)
+    logger.event(1, "start", "Starting leave-one-out placement-accuracy calibration", version=__version__)
+    output = prepare_output_directory(arguments.output)
+    tree = Tree.from_path(arguments.tree, arguments.max_cache_megabytes)
+    if len(tree.tips) < 4:
+        raise ValueError("Placement-accuracy calibration requires at least four reference tips")
+    alignment = read_fasta_alignment(arguments.reference_alignment)
+    reference_by_id = {sequence.sample_id: sequence for sequence in alignment.sequences}
+    tree_tip_names = set(tree.tip_index)
+    alignment_names = set(reference_by_id)
+    if tree_tip_names != alignment_names:
+        missing_in_alignment = sorted(tree_tip_names - alignment_names)
+        missing_in_tree = sorted(alignment_names - tree_tip_names)
+        details: list[str] = []
+        if missing_in_alignment:
+            details.append("tips absent from the alignment: " + ", ".join(missing_in_alignment[:10]))
+        if missing_in_tree:
+            details.append("alignment IDs absent from the tree: " + ", ".join(missing_in_tree[:10]))
+        raise ValueError("Reference tree and alignment IDs differ; " + "; ".join(details))
+
+    controls = tuple(
+        sequence.sample_id
+        for sequence in select_unique_sequence_controls(alignment.sequences, arguments.max_controls)
+    )
+    logger.event(
+        1,
+        "input",
+        "Selected unique-sequence leave-one-out controls",
+        reference_tips=len(tree.tips),
+        controls=len(controls),
+        near_hop_threshold=arguments.near_hop_threshold,
+    )
+    config = placement_config_from_arguments(arguments)
+    records: list[dict[str, object]] = []
+    for number, held_out_id in enumerate(controls, start=1):
+        pruned_tree, attachment = tree.without_tip(held_out_id)
+        pruned_references = tuple(
+            reference_by_id[tip.name or ""] for tip in pruned_tree.tips
+        )
+        result = place_query(reference_by_id[held_out_id], pruned_references, pruned_tree, config)
+        grade = grade_placement_accuracy(
+            result, pruned_tree, attachment, arguments.near_hop_threshold
+        )
+        records.append(build_accuracy_record(result, grade, attachment, held_out_id))
+        if number == len(controls) or number % 10 == 0:
+            logger.event(
+                2, "calibration", "Completed leave-one-out controls", completed=number, controls=len(controls)
+            )
+
+    summary = write_placement_accuracy_outputs(output, records, arguments, tree, alignment)
+    logger.event(1, "calibration", "Completed placement-accuracy calibration", **summary["summary"])
+    (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
+    logger.event(1, "complete", "Placement-accuracy calibration completed")
+    append_final_event(output, logger.events[-1])
+    return 0
+
+
+def write_placement_accuracy_outputs(
+    output: Path,
+    records: Sequence[dict[str, object]],
+    arguments: argparse.Namespace,
+    tree: Tree,
+    alignment: object,
+) -> dict[str, object]:
+    """Write auditable per-control records and a provenance summary."""
+
+    with (output / "placement_accuracy_records.tsv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=list(ACCURACY_RECORD_COLUMNS), delimiter="\t", lineterminator="\n"
+        )
+        writer.writeheader()
+        for record in records:
+            writer.writerow({key: "" if value is None else value for key, value in record.items()})
+    summary = {
+        "version": __version__,
+        "method": "fixed_tree_leave_one_unique_sequence_out_placement_accuracy",
+        "warning": (
+            "Internal topology diagnostics only: this is not phylogenetic support, "
+            "not a branch-length error, and not evidence of external generalization."
+        ),
+        "tree_path": str(Path(arguments.tree).resolve()),
+        "tree_sha256": file_sha256(arguments.tree),
+        "reference_alignment_path": str(Path(arguments.reference_alignment).resolve()),
+        "reference_alignment_sha256": file_sha256(arguments.reference_alignment),
+        "reference_tips": len(tree.tips),
+        "reference_columns": getattr(alignment, "site_count"),
+        "max_controls": arguments.max_controls,
+        "near_hop_threshold": arguments.near_hop_threshold,
+        "summary": summarize_placement_accuracy(records),
+        "hop_distribution": hop_distribution(records),
+    }
+    (output / "placement_accuracy_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return summary
 
 
 def select_unique_sequence_controls(

@@ -151,5 +151,53 @@ class PlacementAccuracyTests(unittest.TestCase):
         self.assertEqual(hop_distribution(records), {"0": 2, "2": 1, "unresolved": 1})
 
 
+class PlacementAccuracyCliTests(unittest.TestCase):
+    def test_command_writes_records_and_summary(self) -> None:
+        import json
+        import shutil
+        from pathlib import Path
+
+        from treetip_placer.cli import main
+
+        root = Path.cwd() / ".treetip-placement-accuracy-test"
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir()
+        try:
+            tree = root / "tree.nwk"
+            alignment = root / "reference.fasta"
+            output = root / "output"
+            tree.write_text("((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);\n", encoding="utf-8")
+            alignment.write_text(
+                ">A\nAAAAAA\n>B\nAAAAAT\n>C\nCCCCCC\n>D\nCCCCCG\n", encoding="utf-8"
+            )
+
+            exit_code = main(
+                [
+                    "calibrate-placement-accuracy",
+                    "--tree", str(tree),
+                    "--reference-alignment", str(alignment),
+                    "--output", str(output),
+                    "--preset", "thorough",
+                    "--min-comparable-sites", "2",
+                    "--unresolved-weight", "0",
+                ]
+            )
+
+            self.assertEqual(exit_code, 0)
+            records = (output / "placement_accuracy_records.tsv").read_text(encoding="utf-8")
+            self.assertIn("edge_hops_from_truth", records)
+            self.assertIn("true_attachment_kind", records)
+            summary = json.loads((output / "placement_accuracy_summary.json").read_text(encoding="utf-8"))
+            self.assertEqual(summary["summary"]["controls"], 4)
+            self.assertEqual(summary["summary"]["outcome_correct"], 4)
+            self.assertEqual(summary["near_hop_threshold"], 2)
+            self.assertEqual(sum(summary["hop_distribution"].values()), 4)
+            self.assertIn("not phylogenetic support", summary["warning"])
+        finally:
+            if root.exists():
+                shutil.rmtree(root)
+
+
 if __name__ == "__main__":
     unittest.main()
