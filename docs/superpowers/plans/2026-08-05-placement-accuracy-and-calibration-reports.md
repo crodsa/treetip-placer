@@ -1136,7 +1136,43 @@ In `src/treetip_placer/cli.py`, after the `from .alignment import (...)` block:
 from .calibration_reports import write_calibration_report
 ```
 
-- [ ] **Step 4: Wire the panel-gate report**
+- [ ] **Step 4: Return the rows that `write_calibration_records` already builds**
+
+`write_calibration_records` currently builds each row, writes it, and returns
+only a conflict count — so the report would otherwise have to re-read the TSV
+it just wrote. Have it return the rows alongside the count instead.
+
+Change its signature and its `return`:
+
+```python
+def write_calibration_records(
+    output_directory: Path,
+    decisions: Sequence[object],
+    truth_by_id: dict[str, str],
+    source_id_by_id: dict[str, str],
+) -> tuple[int, list[dict[str, object]]]:
+    """Write one auditable calibration record per held-out panel control.
+
+    Returns the flagged-conflict count and the rows written, so a report can
+    render them without re-reading the file.
+    """
+```
+
+Inside the function, collect each row as it is written by adding
+`written_rows: list[dict[str, object]] = []` beside the existing
+`conflicts: list[dict[str, object]] = []`, appending `row` to `written_rows`
+immediately after `writer.writerow(row)`, and changing the final
+`return len(conflicts)` to `return len(conflicts), written_rows`.
+
+Then update the one call site in `run_calibrate_panel_gate`:
+
+```python
+    conflict_count, calibration_rows = write_calibration_records(
+        output, decisions, truth_by_id, source_id_by_id
+    )
+```
+
+- [ ] **Step 5: Wire the panel-gate report**
 
 In `run_calibrate_panel_gate`, immediately after the `calibration_summary.json` write and before the `logger.event(1, "calibration", ...)` call:
 
@@ -1145,7 +1181,7 @@ In `run_calibrate_panel_gate`, immediately after the `calibration_summary.json` 
         output,
         "Panel-gate calibration",
         summary,
-        read_calibration_records(output / "calibration_records.tsv"),
+        calibration_rows,
         (
             "calibration_id", "source_sample_id", "truth", "assignment",
             "decision_status", "outcome", "classical_nearest_distance",
@@ -1162,17 +1198,7 @@ In `run_calibrate_panel_gate`, immediately after the `calibration_summary.json` 
     )
 ```
 
-Add this helper immediately before `def run_calibrate_panel_gate(`, since `write_calibration_records` writes rows without returning them:
-
-```python
-def read_calibration_records(path: Path) -> list[dict[str, str]]:
-    """Re-read written calibration rows so the report renders what was saved."""
-
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        return list(csv.DictReader(handle, delimiter="\t"))
-```
-
-- [ ] **Step 5: Wire the clade-assignment report**
+- [ ] **Step 6: Wire the clade-assignment report**
 
 At the end of `write_clade_calibration_outputs`, after the `clade_calibration_summary.json` write:
 
@@ -1194,7 +1220,7 @@ At the end of `write_clade_calibration_outputs`, after the `clade_calibration_su
     )
 ```
 
-- [ ] **Step 6: Wire the placement-accuracy report**
+- [ ] **Step 7: Wire the placement-accuracy report**
 
 At the end of `write_placement_accuracy_outputs`, between the `placement_accuracy_summary.json` write and `return summary`:
 
@@ -1214,7 +1240,7 @@ At the end of `write_placement_accuracy_outputs`, between the `placement_accurac
     )
 ```
 
-- [ ] **Step 7: Run the full suite**
+- [ ] **Step 8: Run the full suite**
 
 ```bash
 python -m unittest discover -s tests 2>&1 | tail -3
@@ -1222,7 +1248,7 @@ python -m unittest discover -s tests 2>&1 | tail -3
 
 Expected: `Ran 44 tests` and `OK`.
 
-- [ ] **Step 8: Inspect one rendered report by eye**
+- [ ] **Step 9: Inspect one rendered report by eye**
 
 ```bash
 rm -rf /tmp/ttp-report-smoke && mkdir -p /tmp/ttp-report-smoke
@@ -1233,7 +1259,7 @@ treetip calibrate-placement-accuracy --tree /tmp/ttp-report-smoke/tree.nwk --ref
 
 Expected: exit 0, and `/tmp/ttp-report-smoke/out/report.html` opens in a browser showing the warning box, provenance with SHA-256 values, four `CORRECT` controls with a full-width bar, and no threshold-sweep section. Confirm no unescaped markup and no broken artifact links.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add src/treetip_placer/cli.py tests/test_cli.py tests/test_placement_accuracy.py
@@ -1300,7 +1326,7 @@ Add to **Important limitations**:
 - The placement-accuracy grade is an unweighted topology diagnostic on a fixed backbone, not phylogenetic support or branch-length error. The `--near-hop-threshold` default of 2 is provisional and has not been calibrated against real panels.
 ```
 
-Replace milestone 6 with these two, keeping the other milestones unchanged:
+`docs/HANDOFF.md` currently lists milestones 1 through 7. Replace the text of milestone 6 with the first item below, keep milestones 1-5 and 7 unchanged, and append the second item as a new milestone 8:
 
 ```markdown
 6. Run `calibrate-placement-accuracy` on the private classical and cryptic panels, then set `--near-hop-threshold` from the observed hop distribution instead of the provisional default of 2.
