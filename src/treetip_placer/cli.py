@@ -22,6 +22,7 @@ from .alignment import (
     require_matching_alignment_widths,
     write_fasta_records,
 )
+from .calibration_reports import write_calibration_report
 from .clade_assignment import (
     assign_phylogenetic_clades,
     load_tip_clades,
@@ -766,7 +767,9 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
     decisions = choose_reference_panel(
         classical_results, cryptic_results, arguments.min_panel_distance_separation
     )
-    conflict_count = write_calibration_records(output, decisions, truth_by_id, source_id_by_id)
+    conflict_count, calibration_rows = write_calibration_records(
+        output, decisions, truth_by_id, source_id_by_id
+    )
     sweep = panel_threshold_sweep(
         classical_results,
         cryptic_results,
@@ -790,6 +793,25 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
     }
     (output / "calibration_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    write_calibration_report(
+        output,
+        "Panel-gate calibration",
+        summary,
+        calibration_rows,
+        (
+            "calibration_id", "source_sample_id", "truth", "assignment",
+            "decision_status", "outcome", "classical_nearest_distance",
+            "cryptic_nearest_distance", "distance_margin",
+        ),
+        "outcome",
+        frozenset({"INCORRECT_CALL"}),
+        (
+            ("calibration_records.tsv", "Per-control records (TSV)"),
+            ("panel_label_conflicts.tsv", "Flagged label conflicts (TSV)"),
+            ("calibration_summary.json", "Calibration summary (JSON)"),
+        ),
+        threshold_sweep=sweep,
     )
     logger.event(1, "calibration", "Completed panel-gate calibration", **summary["default_result"])
     (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
@@ -1006,6 +1028,21 @@ def write_clade_calibration_outputs(
     (output / "clade_calibration_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    write_calibration_report(
+        output,
+        "Clade-assignment calibration",
+        summary,
+        records,
+        fields,
+        "outcome",
+        frozenset({"INCORRECT_CALL"}),
+        (
+            ("clade_calibration_records.tsv", "Per-control records (TSV)"),
+            ("clade_confusion.tsv", "Clade confusion counts (TSV)"),
+            ("clade_calibration_exclusions.tsv", "Excluded singleton clades (TSV)"),
+            ("clade_calibration_summary.json", "Calibration summary (JSON)"),
+        ),
+    )
 
 
 def summarize_clade_calibration(records: Sequence[dict[str, object]]) -> dict[str, int]:
@@ -1137,6 +1174,19 @@ def write_placement_accuracy_outputs(
     (output / "placement_accuracy_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    write_calibration_report(
+        output,
+        "Placement-accuracy calibration",
+        summary,
+        records,
+        ACCURACY_RECORD_COLUMNS,
+        "outcome",
+        frozenset({"FAR"}),
+        (
+            ("placement_accuracy_records.tsv", "Per-control records (TSV)"),
+            ("placement_accuracy_summary.json", "Calibration summary (JSON)"),
+        ),
+    )
     return summary
 
 
@@ -1235,14 +1285,19 @@ def write_calibration_records(
     decisions: Sequence[object],
     truth_by_id: dict[str, str],
     source_id_by_id: dict[str, str],
-) -> int:
-    """Write one auditable calibration record per held-out panel control."""
+) -> tuple[int, list[dict[str, object]]]:
+    """Write one auditable calibration record per held-out panel control.
+
+    Returns the flagged-conflict count and the rows written, so a report can
+    render them without re-reading the file.
+    """
 
     fields = [
         "calibration_id", "source_sample_id", "truth", "assignment", "decision_status",
         "outcome", "classical_nearest_distance", "cryptic_nearest_distance", "distance_margin",
     ]
     conflicts: list[dict[str, object]] = []
+    written_rows: list[dict[str, object]] = []
     with (output_directory / "calibration_records.tsv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
         writer.writeheader()
@@ -1266,13 +1321,14 @@ def write_calibration_records(
             for field in ("classical_nearest_distance", "cryptic_nearest_distance", "distance_margin"):
                 row[field] = "" if row[field] is None else format(row[field], ".12g")
             writer.writerow(row)
+            written_rows.append(row)
             if outcome == "INCORRECT_CALL":
                 conflicts.append(row)
     with (output_directory / "panel_label_conflicts.tsv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(conflicts)
-    return len(conflicts)
+    return len(conflicts), written_rows
 
 
 def map_queries_to_panel(

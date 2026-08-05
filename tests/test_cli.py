@@ -82,6 +82,9 @@ class CliTests(unittest.TestCase):
             self.assertTrue((output / "clade_confusion.tsv").is_file())
             self.assertTrue((output / "clade_calibration_exclusions.tsv").is_file())
             self.assertTrue((output / "clade_calibration_summary.json").is_file())
+            self.assertTrue((output / "report.html").is_file())
+            report = (output / "report.html").read_text(encoding="utf-8")
+            self.assertIn("Clade-assignment calibration", report)
         finally:
             if root.exists():
                 shutil.rmtree(root)

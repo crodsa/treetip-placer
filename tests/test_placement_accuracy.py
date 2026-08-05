@@ -194,6 +194,9 @@ class PlacementAccuracyCliTests(unittest.TestCase):
             self.assertEqual(summary["near_hop_threshold"], 2)
             self.assertEqual(sum(summary["hop_distribution"].values()), 4)
             self.assertIn("not phylogenetic support", summary["warning"])
+            report = (output / "report.html").read_text(encoding="utf-8")
+            self.assertIn("Placement-accuracy calibration", report)
+            self.assertIn("not phylogenetic support", report)
         finally:
             if root.exists():
                 shutil.rmtree(root)
