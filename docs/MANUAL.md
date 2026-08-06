@@ -86,6 +86,22 @@ The underlying data behind that report also lives in the same folder as plain ta
 
 If you see a lot of `WARN` or `AMBIGUOUS` results on isolates you have independent reason to trust, that is worth flagging to whoever maintains the reference package — it may mean the reference collection needs to grow to cover that part of the diversity better.
 
+### Why a call is `WARN`: reading the Findings column
+
+Every `report.html` row and every line of `panel_assignment.tsv` / `clade_assignment.tsv` has a **Findings** column. Whenever a status is `WARN`, `AMBIGUOUS`, or `UNRESOLVED`, this column names the specific reason — it is never left blank. One isolate can show more than one reason at once, separated by `|`.
+
+| Code | In plain terms |
+| --- | --- |
+| `SELECTED_EDGE_CONSENSUS_DISAGREES_WITH_NEAREST_REFERENCE` | The clade call was decided by the isolate's single closest match in the reference collection, because a broader look at nearby branches would have suggested a different (and less reliable) answer. This is the tool correctly resolving a conflict, not a defect. |
+| `MIXED_CLADE_LABELS_ON_SELECTED_EDGE` | The isolate landed in a part of the reference tree where neighboring reference isolates don't all agree on their clade label, so the closest single match was used instead of a broader consensus. |
+| `DIFFUSE_DISTANCE_WEIGHT` | The statistical fit to the nearest reference was looser than typical — still the best available match, just not a sharp, unambiguous one. |
+| `LONG_TERMINAL_BRANCH` | The isolate is noticeably more distant from its nearest reference than is typical for this collection. Worth a second look if that distance matters for your purpose. |
+| `UNSTABLE_BOOTSTRAP_PLACEMENT` | (Only appears if bootstrap replicates were requested.) Repeated resampling of the alignment did not consistently support the same placement. |
+| `PANEL_DISTANCE_MARGIN_TOO_SMALL` | The isolate is nearly equally close to both the classical and cryptic collections — this is what produces an `AMBIGUOUS` call. |
+| `PARTIAL_COVERAGE` / `LOW_COVERAGE` | Part of the isolate's sequence didn't align to usable reference positions. `LOW_COVERAGE` is severe enough to block a call (`UNRESOLVED`); `PARTIAL_COVERAGE` is not. |
+| `DISTANT_FROM_REFERENCE_PANEL` | Even the closest reference isolate is unusually far away — treat the call with extra caution. |
+| `NO_COMPARABLE_REFERENCE` / `INSUFFICIENT_COMPARABLE_SITES` | Too little of the isolate's sequence overlaps with the reference collection to compare at all. |
+
 ### A note on precision
 
 The current reference collection is built from 7 MLST genes (not full genomes). That is enough to separate classical from cryptic isolates very reliably, and to place an isolate within the right clade. It is **not** enough to resolve fine differences between two isolates that are genetically very close to each other — don't over-interpret small distance differences as if they were whole-genome resolution. If you need finer resolution, ask whoever maintains the reference package whether a core-genome or whole-genome version is planned.

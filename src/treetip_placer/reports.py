@@ -101,8 +101,15 @@ def render_decision_row(
     decision: PanelDecision,
     clade_assignment: CladeAssignment | None = None,
 ) -> str:
-    """Render one escaped result row with stable numeric formatting."""
+    """Render one escaped result row with stable numeric formatting.
 
+    Findings combines both sources that can independently raise a WARN --
+    the panel decision (the selected placement's own QC findings) and the
+    clade assignment -- so a reader sees every reason, not just whichever
+    layer happened to have one.
+    """
+
+    all_findings = decision.findings + (clade_assignment.findings if clade_assignment else ())
     values = (
         decision.sample_id,
         decision.assignment,
@@ -113,7 +120,7 @@ def render_decision_row(
         format_value(decision.cryptic_nearest_distance),
         format_value(decision.distance_margin),
         decision.selected_placement_status or "",
-        " | ".join(decision.findings),
+        " | ".join(all_findings),
     )
     cells = "".join(f"<td>{escape(value)}</td>" for value in values)
     return f"<tr class=\"{escape(decision.assignment)}\">{cells}</tr>"
