@@ -157,13 +157,36 @@ def assign_phylogenetic_clades(
         labelled_tips = tuple(tip_id for tip_id in subtree_tips if tip_id in labels)
         subtree_clades = {labels[tip_id] for tip_id in labelled_tips}
         if len(subtree_clades) == 1:
+            edge_clade = next(iter(subtree_clades))
+            nearest_reference_clade = labels.get(nearest_reference) if nearest_reference else None
+            if nearest_reference_clade is not None and nearest_reference_clade != edge_clade:
+                # A selected edge's full descendant subtree can span tips that
+                # are topologically nearby but genetically distant on a weakly
+                # resolved tree (many near-zero-length branches), so a single
+                # uniform edge-consensus label is not automatically trustworthy.
+                # The nearest labelled reference by real genetic distance is
+                # unaffected by that topology, and is preferred when the two
+                # disagree.
+                assignments.append(
+                    CladeAssignment(
+                        sample_id=decision.sample_id,
+                        selected_panel=panel_name,
+                        phylogenetic_clade=nearest_reference_clade,
+                        clade_assignment_status="WARN",
+                        assignment_method="nearest_labelled_reference_edge_consensus_conflict",
+                        nearest_reference=nearest_reference,
+                        supporting_reference_tips=(nearest_reference,) if nearest_reference else (),
+                        findings=("SELECTED_EDGE_CONSENSUS_DISAGREES_WITH_NEAREST_REFERENCE",),
+                    )
+                )
+                continue
             status = "PASS" if result.final_status == "PASS" else "WARN"
             findings = () if status == "PASS" else ("SELECTED_PLACEMENT_NOT_PASS",)
             assignments.append(
                 CladeAssignment(
                     sample_id=decision.sample_id,
                     selected_panel=panel_name,
-                    phylogenetic_clade=next(iter(subtree_clades)),
+                    phylogenetic_clade=edge_clade,
                     clade_assignment_status=status,
                     assignment_method="selected_edge_descendant_tip_labels",
                     nearest_reference=nearest_reference,

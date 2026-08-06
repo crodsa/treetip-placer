@@ -89,6 +89,86 @@ class CladeAssignmentTests(unittest.TestCase):
         self.assertEqual(assignment.clade_assignment_status, "UNRESOLVED")
         self.assertEqual(assignment.findings, ("SELECTED_PLACEMENT_UNRESOLVED",))
 
+    def test_nearest_reference_arbitrates_when_edge_consensus_disagrees(self) -> None:
+        # Selected edge is C's own edge: its descendant subtree is just {C},
+        # so consensus trivially reads C's label ("C-III"). But the query's
+        # single nearest reference by real genetic distance is A ("C-II") --
+        # a real disagreement between tree-edge topology and raw distance,
+        # the exact failure calibrate-clade-assignment hit on the 2026-08-06
+        # panel: a selected edge's descendant subtree can span tips that are
+        # topologically nearby but genetically distant on a weakly resolved
+        # tree, while the nearest-reference distance is unaffected by that.
+        tip_c = self.tree.tips[self.tree.tip_index["C"]]
+        conflicting_result = PlacementResult(
+            sample_id="query",
+            qc=QueryQc("query", "PASS", 1.0, 10, 10, "A", 0.01),
+            final_status="PASS",
+            best_fit=EdgeFit(
+                edge_id=self.tree.edge_by_child[tip_c.node_id].edge_id,
+                parent_id=tip_c.parent.node_id if tip_c.parent else -1,
+                child_id=tip_c.node_id,
+                distal_length=0.1,
+                pendant_length=0.01,
+                objective=0.0,
+                rmse=0.0,
+            ),
+        )
+
+        assignment = assign_phylogenetic_clades(
+            [self.decision],
+            {"cryptic": (self.tree, [conflicting_result])},
+            {"cryptic": {"A": "C-II", "B": "C-II", "C": "C-III"}},
+        )[0]
+
+        self.assertEqual(assignment.phylogenetic_clade, "C-II")
+        self.assertEqual(assignment.clade_assignment_status, "WARN")
+        self.assertEqual(
+            assignment.assignment_method,
+            "nearest_labelled_reference_edge_consensus_conflict",
+        )
+        self.assertIn(
+            "SELECTED_EDGE_CONSENSUS_DISAGREES_WITH_NEAREST_REFERENCE", assignment.findings
+        )
+        self.assertEqual(assignment.supporting_reference_tips, ("A",))
+
+    def test_edge_consensus_agreeing_with_nearest_reference_still_passes(self) -> None:
+        # Same scenario as test_assigns_single_clade_below_selected_edge, made
+        # explicit as a regression guard for the new arbitration branch: when
+        # the edge consensus and the nearest reference agree, PASS must still
+        # come from the ordinary edge-consensus path, not the conflict branch.
+        assignment = assign_phylogenetic_clades(
+            [self.decision],
+            {"cryptic": (self.tree, [self.result])},
+            {"cryptic": {"A": "C-II", "B": "C-II", "C": "C-III"}},
+        )[0]
+
+        self.assertEqual(assignment.phylogenetic_clade, "C-II")
+        self.assertEqual(assignment.clade_assignment_status, "PASS")
+        self.assertEqual(assignment.assignment_method, "selected_edge_descendant_tip_labels")
+
+    def test_unlabelled_nearest_reference_cannot_arbitrate(self) -> None:
+        # The query's nearest reference by distance is C, but C carries no
+        # label in this TSV. With nothing to cross-check against, the edge
+        # consensus (A's label) must still stand as before -- the arbitration
+        # only overrides when it has a labelled opinion to override with.
+        tip_c = self.tree.tips[self.tree.tip_index["C"]]
+        result_with_unlabelled_nearest = PlacementResult(
+            sample_id="query",
+            qc=QueryQc("query", "PASS", 1.0, 10, 10, tip_c.name, 0.02),
+            final_status="PASS",
+            best_fit=self.result.best_fit,
+        )
+
+        assignment = assign_phylogenetic_clades(
+            [self.decision],
+            {"cryptic": (self.tree, [result_with_unlabelled_nearest])},
+            {"cryptic": {"A": "C-II", "B": "C-II"}},
+        )[0]
+
+        self.assertEqual(assignment.phylogenetic_clade, "C-II")
+        self.assertEqual(assignment.clade_assignment_status, "PASS")
+        self.assertEqual(assignment.assignment_method, "selected_edge_descendant_tip_labels")
+
     def test_mixed_edge_uses_nearest_labelled_reference_as_warn_fallback(self) -> None:
         mixed_child = self.tree.root.children[0]
         mixed_result = PlacementResult(
