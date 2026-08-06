@@ -15,9 +15,10 @@ It does this by comparing your sequence to a fixed reference collection of alrea
 ## Before you start: what you need
 
 1. **The tool installed** (see below).
-2. **A reference package** — a bundle of two reference collections (classical and cryptic), each with its own tree and alignment, plus clade labels. This repository ships a ready-to-use one at `reference-packages/mlst-cdifficile-20260806/paired_reference.json` — see that folder's own `README.md` for what it covers and how it was calibrated. If your lab maintains a different one instead, ask whoever set it up for the path.
-3. **MAFFT** installed and on your system (a free, widely used sequence-alignment program: <https://mafft.cbrc.jp/alignment/software/>). TreeTip Placer uses it internally to line up your sequences against the reference.
-4. **Your own sequences as a FASTA file.** Each sequence should be the concatenation of the same 7 MLST loci (adk, atpA, dxr, glyA, recA, sodA, tpi) the reference was built from, one entry per isolate, with a short unique name after the `>` on each header line. If you are not sure your sequences are in the right format, ask whoever built the reference package — placement will refuse to run rather than silently guess.
+2. **MAFFT** installed and on your system (a free, widely used sequence-alignment program: <https://mafft.cbrc.jp/alignment/software/>). TreeTip Placer uses it internally to line up your sequences against the reference. `classify` (below) finds it automatically if it's on your system `PATH`.
+3. **Your own sequences as a FASTA file.** Each sequence should be the concatenation of the same 7 MLST loci (adk, atpA, dxr, glyA, recA, sodA, tpi) the bundled reference was built from, one entry per isolate, with a short unique name after the `>` on each header line. If you are not sure your sequences are in the right format, placement will refuse to run rather than silently guess.
+
+You do **not** need to separately locate a reference package — one ships with this repository and `classify` finds it on its own; see below.
 
 ## Installing
 
@@ -39,7 +40,29 @@ This should print a version number (for example `0.7.0`). If it doesn't, somethi
 
 ## Running it on your samples
 
-The command you will use almost every time is `place-auto`. It figures out on its own whether each of your isolates is classical or cryptic — you don't need to know in advance.
+The command you will use almost every time is `classify`. Give it your FASTA file and say which organism/reference package you want — it figures out the rest (finds MAFFT, names the output folder, and decides classical vs. cryptic per isolate) without any other setup:
+
+```bash
+treetip classify my_isolates.fasta --organism cdifficile-mlst
+```
+
+That's the whole command for routine use. It prints the three things it resolved automatically before it starts:
+
+```
+Using organism 'cdifficile-mlst' -> reference-packages/mlst-cdifficile-20260806/paired_reference.json
+Using MAFFT: /usr/local/bin/mafft
+Writing output to: my_isolates_classify_20260806T142530Z
+```
+
+`--organism` is the one thing you always state explicitly — the tool will never guess which reference collection you mean, even when only one is bundled today. Run `treetip classify --help` to see every currently available `--organism` value.
+
+Override anything it would have picked automatically if you need to: `--output my_results` to name the folder yourself, `--mafft /path/to/mafft` if you have more than one copy installed, or `--min-panel-distance-separation` to override the package's own calibrated threshold. Everything not given a value falls back to the automatic choice above.
+
+A run over a handful of isolates typically finishes in well under a minute.
+
+### If you need more control: `place-auto`
+
+`place-auto` is the same underlying command with nothing automatic — every input is an explicit flag, including the reference package path, in case you're pointing at a reference collection other than the one bundled with this repository:
 
 ```bash
 treetip place-auto \
@@ -49,12 +72,7 @@ treetip place-auto \
   --output my_results
 ```
 
-- `--reference-package`: the file from step 2 above (or the path to your lab's own package, if different).
-- `--query-fasta`: your own FASTA file.
-- `--mafft`: wherever MAFFT is installed on your machine. If you're not sure, run `which mafft` in a terminal (Mac/Linux) to find it.
-- `--output`: a name for a new folder where the results will be written. It must not already exist — the tool creates it fresh every run so old results are never silently overwritten.
-
-A run over a handful of isolates typically finishes in well under a minute.
+Use this if `classify`'s auto-detection picks something you don't want and no override flag covers it, or if you maintain your own reference package outside this repository.
 
 ## Reading the results
 

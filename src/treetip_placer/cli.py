@@ -7,13 +7,15 @@ import csv
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 from . import __version__
 from .alignment import (
@@ -55,6 +57,56 @@ from .tree import Tree
 _WORKER_TREE: Tree | None = None
 _WORKER_REFERENCES: tuple[AlignedSequence, ...] = ()
 _WORKER_CONFIG: PlacementConfig | None = None
+
+# src/treetip_placer/cli.py -> src/treetip_placer -> src -> repository root.
+# Valid for the only supported distribution model (an editable install from a
+# git checkout); there is no packaged wheel that ships reference-packages/
+# separately.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Maps a `classify --organism` key to its directory name under
+# reference-packages/. Add an entry here (and the matching directory) to make
+# a new bundled reference package selectable without any other CLI change.
+ORGANISM_REFERENCE_PACKAGES: dict[str, str] = {
+    "cdifficile-mlst": "mlst-cdifficile-20260806",
+}
+
+
+def resolve_organism_reference_package(organism: str) -> Path:
+    """Resolve a `classify --organism` key to its bundled manifest path."""
+
+    manifest_path = (
+        _REPO_ROOT / "reference-packages" / ORGANISM_REFERENCE_PACKAGES[organism] / "paired_reference.json"
+    )
+    if not manifest_path.is_file():
+        raise ValueError(
+            f"Bundled reference package for organism '{organism}' is missing: "
+            f"expected {manifest_path}. Check that the repository checkout is complete."
+        )
+    return manifest_path
+
+
+def resolve_mafft_executable(
+    explicit: str | None, *, path_lookup: Callable[[str], str | None] = shutil.which
+) -> str:
+    """Return the MAFFT executable to use, auto-detecting it on PATH if not given."""
+
+    if explicit:
+        return explicit
+    found = path_lookup("mafft")
+    if found is None:
+        raise ValueError(
+            "MAFFT was not found on PATH. Install it (https://mafft.cbrc.jp/alignment/software/) "
+            "or pass --mafft /path/to/mafft explicitly."
+        )
+    return found
+
+
+def default_classify_output_directory(query_fasta: str, *, now: datetime | None = None) -> str:
+    """Build an auto-generated, collision-resistant output directory name."""
+
+    timestamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    return f"{Path(query_fasta).stem}_classify_{timestamp}"
 
 
 @dataclass(frozen=True)
@@ -164,6 +216,38 @@ def build_parser() -> argparse.ArgumentParser:
     )
     auto.add_argument("--output", required=True, help="New, empty output directory.")
     add_placement_controls(auto)
+
+    classify = subparsers.add_parser(
+        "classify",
+        help=(
+            "Classify a query FASTA against a bundled reference package with minimal setup: "
+            "auto-detects MAFFT and auto-names the output directory."
+        ),
+    )
+    classify.add_argument("query_fasta", help="Raw query FASTA; mapped separately to both panels.")
+    classify.add_argument(
+        "--organism",
+        required=True,
+        choices=sorted(ORGANISM_REFERENCE_PACKAGES),
+        help="Which bundled reference package to classify against.",
+    )
+    classify.add_argument(
+        "--output",
+        help="Output directory. Auto-generated from the query FASTA's name and the current time if omitted.",
+    )
+    classify.add_argument(
+        "--mafft",
+        help="MAFFT executable. Auto-detected on PATH (via `which mafft`) if omitted.",
+    )
+    classify.add_argument("--mafft-threads", type=positive_integer, default=1, help="MAFFT threads per mapping.")
+    classify.add_argument(
+        "--min-panel-distance-separation",
+        type=nonnegative_float,
+        default=None,
+        help="Minimum nearest-reference distance advantage required for a panel assignment. "
+        "Defaults to the bundled package's own calibrated value.",
+    )
+    add_placement_controls(classify)
 
     calibrate = subparsers.add_parser(
         "calibrate-panel-gate",
@@ -346,6 +430,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_place(arguments)
         if arguments.command == "place-auto":
             return run_auto_place(arguments)
+        if arguments.command == "classify":
+            return run_classify(arguments)
         if arguments.command == "calibrate-panel-gate":
             return run_calibrate_panel_gate(arguments)
         if arguments.command == "calibrate-clade-assignment":
@@ -628,6 +714,35 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
     logger.event(1, "complete", "Automatic panel placement completed", **selection_summary)
     append_final_event(output, logger.events[-1])
     return 0
+
+
+def run_classify(arguments: argparse.Namespace) -> int:
+    """Classify a query FASTA with minimal setup, delegating to run_auto_place.
+
+    Resolves the three things place-auto normally requires explicitly --
+    which reference package, where MAFFT is, and where to write output --
+    then builds the equivalent Namespace and reuses run_auto_place unchanged.
+    """
+
+    manifest_path = resolve_organism_reference_package(arguments.organism)
+    mafft = resolve_mafft_executable(arguments.mafft)
+    output = arguments.output or default_classify_output_directory(arguments.query_fasta)
+    print(
+        f"Using organism '{arguments.organism}' -> {manifest_path}\n"
+        f"Using MAFFT: {mafft}\n"
+        f"Writing output to: {output}",
+        file=sys.stderr,
+    )
+    arguments.reference_package = str(manifest_path)
+    arguments.classical_tree = None
+    arguments.classical_reference_alignment = None
+    arguments.cryptic_tree = None
+    arguments.cryptic_reference_alignment = None
+    arguments.classical_tip_clades = None
+    arguments.cryptic_tip_clades = None
+    arguments.mafft = mafft
+    arguments.output = output
+    return run_auto_place(arguments)
 
 
 def resolve_tip_clades_path(explicit_path: str | None, panel: PanelReference) -> Path | None:

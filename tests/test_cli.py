@@ -6,7 +6,16 @@ import shutil
 import unittest
 from pathlib import Path
 
-from treetip_placer.cli import main, select_clade_calibration_controls
+from datetime import datetime, timezone
+
+from treetip_placer.cli import (
+    ORGANISM_REFERENCE_PACKAGES,
+    default_classify_output_directory,
+    main,
+    resolve_mafft_executable,
+    resolve_organism_reference_package,
+    select_clade_calibration_controls,
+)
 from treetip_placer.models import AlignedSequence
 
 
@@ -120,6 +129,46 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(controls, ("A", "B"))
 
+    def test_resolve_organism_reference_package_finds_the_bundled_package(self) -> None:
+        self.assertIn("cdifficile-mlst", ORGANISM_REFERENCE_PACKAGES)
+
+        resolved = resolve_organism_reference_package("cdifficile-mlst")
+
+        self.assertTrue(resolved.is_file())
+        self.assertEqual(resolved.name, "paired_reference.json")
+
+    def test_resolve_organism_reference_package_rejects_a_missing_file(self) -> None:
+        # ORGANISM_REFERENCE_PACKAGES maps a key to a directory name under
+        # reference-packages/; if that directory doesn't exist (a broken
+        # checkout, or a future registry entry added before its data lands),
+        # the error must name what was expected rather than raising a bare
+        # FileNotFoundError from deep inside argparse dispatch.
+        ORGANISM_REFERENCE_PACKAGES["nonexistent-test-organism"] = "does-not-exist-on-disk"
+        try:
+            with self.assertRaisesRegex(ValueError, "does-not-exist-on-disk"):
+                resolve_organism_reference_package("nonexistent-test-organism")
+        finally:
+            del ORGANISM_REFERENCE_PACKAGES["nonexistent-test-organism"]
+
+    def test_resolve_mafft_executable_prefers_the_explicit_path(self) -> None:
+        self.assertEqual(resolve_mafft_executable("/custom/path/to/mafft"), "/custom/path/to/mafft")
+
+    def test_resolve_mafft_executable_raises_a_clear_error_when_not_found(self) -> None:
+        with self.assertRaisesRegex(ValueError, "MAFFT"):
+            resolve_mafft_executable(None, path_lookup=lambda _name: None)
+
+    def test_resolve_mafft_executable_falls_back_to_path_lookup(self) -> None:
+        self.assertEqual(
+            resolve_mafft_executable(None, path_lookup=lambda _name: "/usr/local/bin/mafft"),
+            "/usr/local/bin/mafft",
+        )
+
+    def test_default_classify_output_directory_is_stem_based_and_stable(self) -> None:
+        fixed_now = datetime(2026, 8, 6, 12, 30, 45, tzinfo=timezone.utc)
+
+        name = default_classify_output_directory("my_isolates.fasta", now=fixed_now)
+
+        self.assertEqual(name, "my_isolates_classify_20260806T123045Z")
 
 
 if __name__ == "__main__":
