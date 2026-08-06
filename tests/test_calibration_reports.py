@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from treetip_placer.calibration_reports import write_calibration_report
-from treetip_placer.cli import summarize_clade_calibration, write_calibration_records
+from treetip_placer.cli import build_panel_gate_summary, write_calibration_records
 
 
 SUMMARY = {
@@ -96,47 +96,12 @@ class CalibrationReportTests(unittest.TestCase):
 
         self.assertIn('href="placement_accuracy_records.tsv"', document)
 
-    def test_panel_gate_shaped_summary_renders_real_outcome_counts(self) -> None:
-        panel_gate_summary = {
-            "version": "0.7.0",
-            "method": "leave_one_unique_sequence_out_panel_distance_calibration",
-            "warning": "This calibrates cross-panel distance gating only.",
-            "classical_controls": 10,
-            "cryptic_controls": 8,
-            "default_threshold": 0.01,
-            "flagged_panel_label_conflicts": 1,
-            "summary": {"controls": 18, "outcome_correct_call": 17, "outcome_incorrect_call": 1},
-            "classical_reference_alignment_sha256": "def456",
-            "cryptic_reference_alignment_sha256": "ghi789",
-        }
-        panel_gate_records = (
-            {"calibration_id": "a", "source_sample_id": "a", "truth": "CLASSICAL", "assignment": "CLASSICAL", "outcome": "CORRECT_CALL"},
-            {"calibration_id": "b", "source_sample_id": "b", "truth": "CRYPTIC", "assignment": "CLASSICAL", "outcome": "INCORRECT_CALL"},
-        )
+    def test_real_panel_gate_summary_renders_outcome_counts(self) -> None:
+        """Regression guard: drives the real production summary-building path.
 
-        write_calibration_report(
-            output_directory=self.root,
-            title="Panel-gate calibration",
-            summary=panel_gate_summary,
-            records=panel_gate_records,
-            record_columns=("calibration_id", "truth", "assignment", "outcome"),
-            outcome_column="outcome",
-            problem_outcomes=frozenset({"INCORRECT_CALL"}),
-            artifacts=(("calibration_records.tsv", "Per-control records (TSV)"),),
-        )
-        document = (self.root / "report.html").read_text(encoding="utf-8")
-
-        self.assertNotIn("No outcome counts were recorded.", document)
-        self.assertIn("outcome_correct_call", document)
-        self.assertIn("18", document)  # total controls
-        self.assertIn("<dt>classical_controls</dt>", document)
-        self.assertIn("<dt>cryptic_controls</dt>", document)
-
-    def test_real_panel_gate_summary_shape_renders_outcome_counts(self) -> None:
-        """Regression guard: exercises the actual cli.py code path, not a hand-written fixture.
-
-        calibrate-panel-gate has no CLI test (it needs MAFFT), so this is the only
-        guard against the summary dict losing its "summary" sub-dict again.
+        calibrate-panel-gate has no CLI test (it needs MAFFT), so build_panel_gate_summary
+        is called directly here — not re-implemented — so that deleting its "summary" key
+        makes this test fail rather than a hand-written fixture masking the regression.
         """
 
         @dataclass
@@ -159,18 +124,16 @@ class CalibrationReportTests(unittest.TestCase):
         conflict_count, calibration_rows, fields = write_calibration_records(
             self.root, decisions, truth_by_id, source_id_by_id
         )
-        summary = {
-            "version": "0.7.0",
-            "method": "leave_one_unique_sequence_out_panel_distance_calibration",
-            "warning": "This calibrates cross-panel distance gating only.",
-            "classical_controls": 2,
-            "cryptic_controls": 1,
-            "default_threshold": 0.01,
-            "flagged_panel_label_conflicts": conflict_count,
-            "summary": summarize_clade_calibration(calibration_rows),
-            "classical_reference_alignment_sha256": "def456",
-            "cryptic_reference_alignment_sha256": "ghi789",
-        }
+        summary = build_panel_gate_summary(
+            classical_controls_count=2,
+            cryptic_controls_count=1,
+            default_threshold=0.01,
+            conflict_count=conflict_count,
+            sweep=({"threshold": 0.01, "controls": 3, "called": 3, "called_accuracy": 1.0},),
+            calibration_rows=calibration_rows,
+            classical_reference_alignment_sha256="def456",
+            cryptic_reference_alignment_sha256="ghi789",
+        )
 
         write_calibration_report(
             output_directory=self.root,
@@ -181,6 +144,7 @@ class CalibrationReportTests(unittest.TestCase):
             outcome_column="outcome",
             problem_outcomes=frozenset({"INCORRECT_CALL"}),
             artifacts=(("calibration_records.tsv", "Per-control records (TSV)"),),
+            threshold_sweep=summary["threshold_sweep"],
         )
         document = (self.root / "report.html").read_text(encoding="utf-8")
 

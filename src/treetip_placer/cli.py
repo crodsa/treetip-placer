@@ -686,6 +686,42 @@ def resolve_auto_reference_inputs(
     return package, threshold
 
 
+def build_panel_gate_summary(
+    *,
+    classical_controls_count: int,
+    cryptic_controls_count: int,
+    default_threshold: float,
+    conflict_count: int,
+    sweep: Sequence[dict[str, object]],
+    calibration_rows: Sequence[dict[str, object]],
+    classical_reference_alignment_sha256: str,
+    cryptic_reference_alignment_sha256: str,
+) -> dict[str, object]:
+    """Build the panel-gate calibration provenance and outcome summary.
+
+    Extracted as a pure function so the outcome-count contract this feeds to
+    write_calibration_report can be exercised by a test without requiring
+    MAFFT, which run_calibrate_panel_gate otherwise depends on end to end.
+    """
+
+    return {
+        "version": __version__,
+        "method": "leave_one_unique_sequence_out_panel_distance_calibration",
+        "warning": "This calibrates cross-panel distance gating only; it is not external validation or topology-placement accuracy.",
+        "classical_controls": classical_controls_count,
+        "cryptic_controls": cryptic_controls_count,
+        "default_threshold": default_threshold,
+        "flagged_panel_label_conflicts": conflict_count,
+        "default_result": next(
+            row for row in sweep if row["threshold"] == default_threshold
+        ),
+        "threshold_sweep": sweep,
+        "summary": summarize_clade_calibration(calibration_rows),
+        "classical_reference_alignment_sha256": classical_reference_alignment_sha256,
+        "cryptic_reference_alignment_sha256": cryptic_reference_alignment_sha256,
+    }
+
+
 def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
     """Calibrate panel assignment on internal controls without topology placement."""
 
@@ -776,22 +812,16 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
         truth_by_id,
         arguments.min_panel_distance_separation,
     )
-    summary = {
-        "version": __version__,
-        "method": "leave_one_unique_sequence_out_panel_distance_calibration",
-        "warning": "This calibrates cross-panel distance gating only; it is not external validation or topology-placement accuracy.",
-        "classical_controls": len(classical_controls),
-        "cryptic_controls": len(cryptic_controls),
-        "default_threshold": arguments.min_panel_distance_separation,
-        "flagged_panel_label_conflicts": conflict_count,
-        "default_result": next(
-            row for row in sweep if row["threshold"] == arguments.min_panel_distance_separation
-        ),
-        "threshold_sweep": sweep,
-        "summary": summarize_clade_calibration(calibration_rows),
-        "classical_reference_alignment_sha256": file_sha256(arguments.classical_reference_alignment),
-        "cryptic_reference_alignment_sha256": file_sha256(arguments.cryptic_reference_alignment),
-    }
+    summary = build_panel_gate_summary(
+        classical_controls_count=len(classical_controls),
+        cryptic_controls_count=len(cryptic_controls),
+        default_threshold=arguments.min_panel_distance_separation,
+        conflict_count=conflict_count,
+        sweep=sweep,
+        calibration_rows=calibration_rows,
+        classical_reference_alignment_sha256=file_sha256(arguments.classical_reference_alignment),
+        cryptic_reference_alignment_sha256=file_sha256(arguments.cryptic_reference_alignment),
+    )
     (output / "calibration_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
