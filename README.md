@@ -8,6 +8,8 @@ TreeTip Placer adds query sequences to an immutable, branch-length reference tre
 
 A ready-to-use paired classical/cryptic *Clostridioides difficile* reference package, built from concatenated 7-locus MLST alleles, ships in this repository at [`reference-packages/mlst-cdifficile-20260806/`](reference-packages/mlst-cdifficile-20260806/). It is committed with the repository owner's explicit permission — see `AGENTS.md`'s data-in-version-control rule and `docs/HANDOFF.md`'s "Current reference panel" section for full provenance, methodology, and calibration numbers. The package's own `README.md` has the quick-start command.
 
+`treetip classify <query.fasta> --organism cdifficile-mlst` resolves this bundled package, an on-`PATH` MAFFT, and an auto-named output directory without any other flags — see `docs/MANUAL.md`. It is a thin wrapper around `place-auto` (below): `ORGANISM_REFERENCE_PACKAGES` in `cli.py` maps `--organism` keys to `reference-packages/` subdirectories, and adding a new bundled package only requires a new registry entry plus its directory, not a CLI change.
+
 ## Scope
 
 The current backend performs quality-controlled, distance-based placement on a fixed reference tree. It does not replace a de novo phylogenetic reconstruction or a maximum-likelihood placement engine. The reference alignment, coordinate system, masking policy, and tree must be retained as one versioned reference package.
