@@ -94,6 +94,41 @@ class CalibrationReportTests(unittest.TestCase):
 
         self.assertIn('href="placement_accuracy_records.tsv"', document)
 
+    def test_panel_gate_shaped_summary_renders_real_outcome_counts(self) -> None:
+        panel_gate_summary = {
+            "version": "0.7.0",
+            "method": "leave_one_unique_sequence_out_panel_distance_calibration",
+            "warning": "This calibrates cross-panel distance gating only.",
+            "classical_controls": 10,
+            "cryptic_controls": 8,
+            "default_threshold": 0.01,
+            "flagged_panel_label_conflicts": 1,
+            "summary": {"controls": 18, "outcome_correct_call": 17, "outcome_incorrect_call": 1},
+            "classical_reference_alignment_sha256": "def456",
+            "cryptic_reference_alignment_sha256": "ghi789",
+        }
+        panel_gate_records = (
+            {"calibration_id": "a", "source_sample_id": "a", "truth": "CLASSICAL", "assignment": "CLASSICAL", "outcome": "CORRECT_CALL"},
+            {"calibration_id": "b", "source_sample_id": "b", "truth": "CRYPTIC", "assignment": "CLASSICAL", "outcome": "INCORRECT_CALL"},
+        )
+
+        write_calibration_report(
+            output_directory=self.root,
+            title="Panel-gate calibration",
+            summary=panel_gate_summary,
+            records=panel_gate_records,
+            record_columns=("calibration_id", "truth", "assignment", "outcome"),
+            outcome_column="outcome",
+            problem_outcomes=frozenset({"INCORRECT_CALL"}),
+            artifacts=(("calibration_records.tsv", "Per-control records (TSV)"),),
+        )
+        document = (self.root / "report.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("No outcome counts were recorded.", document)
+        self.assertIn("outcome_correct_call", document)
+        self.assertIn("18", document)  # total controls
+        self.assertIn("10", document)  # classical_controls now visible in provenance
+
 
 if __name__ == "__main__":
     unittest.main()

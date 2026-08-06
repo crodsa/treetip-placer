@@ -767,7 +767,7 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
     decisions = choose_reference_panel(
         classical_results, cryptic_results, arguments.min_panel_distance_separation
     )
-    conflict_count, calibration_rows = write_calibration_records(
+    conflict_count, calibration_rows, calibration_fields = write_calibration_records(
         output, decisions, truth_by_id, source_id_by_id
     )
     sweep = panel_threshold_sweep(
@@ -788,6 +788,7 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
             row for row in sweep if row["threshold"] == arguments.min_panel_distance_separation
         ),
         "threshold_sweep": sweep,
+        "summary": summarize_clade_calibration(calibration_rows),
         "classical_reference_alignment_sha256": file_sha256(arguments.classical_reference_alignment),
         "cryptic_reference_alignment_sha256": file_sha256(arguments.cryptic_reference_alignment),
     }
@@ -799,11 +800,7 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
         "Panel-gate calibration",
         summary,
         calibration_rows,
-        (
-            "calibration_id", "source_sample_id", "truth", "assignment",
-            "decision_status", "outcome", "classical_nearest_distance",
-            "cryptic_nearest_distance", "distance_margin",
-        ),
+        calibration_fields,
         "outcome",
         frozenset({"INCORRECT_CALL"}),
         (
@@ -1285,11 +1282,12 @@ def write_calibration_records(
     decisions: Sequence[object],
     truth_by_id: dict[str, str],
     source_id_by_id: dict[str, str],
-) -> tuple[int, list[dict[str, object]]]:
+) -> tuple[int, list[dict[str, object]], tuple[str, ...]]:
     """Write one auditable calibration record per held-out panel control.
 
-    Returns the flagged-conflict count and the rows written, so a report can
-    render them without re-reading the file.
+    Returns the flagged-conflict count, the rows written, and the column
+    order used, so a report can render them without re-reading the file or
+    restating the column list.
     """
 
     fields = [
@@ -1328,7 +1326,7 @@ def write_calibration_records(
         writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(conflicts)
-    return len(conflicts), written_rows
+    return len(conflicts), written_rows, tuple(fields)
 
 
 def map_queries_to_panel(
@@ -1528,7 +1526,6 @@ def placement_config_from_arguments(arguments: argparse.Namespace) -> PlacementC
         unresolved_weight=arguments.unresolved_weight,
         force=arguments.force,
     )
-
 
 
 def run_parallel_placements(

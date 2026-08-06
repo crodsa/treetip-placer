@@ -28,6 +28,9 @@ PROVENANCE_KEYS = (
     "reference_alignment_sha256",
     "classical_reference_alignment_sha256",
     "cryptic_reference_alignment_sha256",
+    "classical_controls",
+    "cryptic_controls",
+    "flagged_panel_label_conflicts",
     "tip_clades_path",
     "tip_clades_sha256",
 )
@@ -51,7 +54,7 @@ def write_calibration_report(
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>TreeTip Placer calibration report</title>
+  <title>{escape(title)}</title>
   <style>
     body {{ font-family: system-ui, sans-serif; margin: 2rem; color: #1f2937; }}
     h1, h2 {{ color: #111827; }}
