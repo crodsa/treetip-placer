@@ -15,7 +15,7 @@ It does this by comparing your sequence to a fixed reference collection of alrea
 ## Before you start: what you need
 
 1. **The tool installed** (see below).
-2. **A reference package** — a bundle of two reference collections (classical and cryptic), each with its own tree and alignment, plus clade labels. Someone on your team builds this once; after that, everyone reuses the same file. Ask whoever set this up for the path to `paired_reference.json` and its accompanying `classical/` and `cryptic/` folders.
+2. **A reference package** — a bundle of two reference collections (classical and cryptic), each with its own tree and alignment, plus clade labels. This repository ships a ready-to-use one at `reference-packages/mlst-cdifficile-20260806/paired_reference.json` — see that folder's own `README.md` for what it covers and how it was calibrated. If your lab maintains a different one instead, ask whoever set it up for the path.
 3. **MAFFT** installed and on your system (a free, widely used sequence-alignment program: <https://mafft.cbrc.jp/alignment/software/>). TreeTip Placer uses it internally to line up your sequences against the reference.
 4. **Your own sequences as a FASTA file.** Each sequence should be the concatenation of the same 7 MLST loci (adk, atpA, dxr, glyA, recA, sodA, tpi) the reference was built from, one entry per isolate, with a short unique name after the `>` on each header line. If you are not sure your sequences are in the right format, ask whoever built the reference package — placement will refuse to run rather than silently guess.
 
@@ -43,13 +43,13 @@ The command you will use almost every time is `place-auto`. It figures out on it
 
 ```bash
 treetip place-auto \
-  --reference-package /path/to/paired_reference.json \
+  --reference-package reference-packages/mlst-cdifficile-20260806/paired_reference.json \
   --query-fasta my_isolates.fasta \
   --mafft /path/to/mafft \
   --output my_results
 ```
 
-- `--reference-package`: the file from step 2 above.
+- `--reference-package`: the file from step 2 above (or the path to your lab's own package, if different).
 - `--query-fasta`: your own FASTA file.
 - `--mafft`: wherever MAFFT is installed on your machine. If you're not sure, run `which mafft` in a terminal (Mac/Linux) to find it.
 - `--output`: a name for a new folder where the results will be written. It must not already exist — the tool creates it fresh every run so old results are never silently overwritten.

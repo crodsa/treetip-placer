@@ -4,6 +4,10 @@ TreeTip Placer adds query sequences to an immutable, branch-length reference tre
 
 **Running this on your own isolates and not building or maintaining the tool?** See [`docs/MANUAL.md`](docs/MANUAL.md) for a plain-language guide to installing it, running `place-auto`, and reading the results. Everything below this point is written for whoever builds and maintains the reference packages and the tool itself.
 
+## Bundled reference package
+
+A ready-to-use paired classical/cryptic *Clostridioides difficile* reference package, built from concatenated 7-locus MLST alleles, ships in this repository at [`reference-packages/mlst-cdifficile-20260806/`](reference-packages/mlst-cdifficile-20260806/). It is committed with the repository owner's explicit permission — see `AGENTS.md`'s data-in-version-control rule and `docs/HANDOFF.md`'s "Current reference panel" section for full provenance, methodology, and calibration numbers. The package's own `README.md` has the quick-start command.
+
 ## Scope
 
 The current backend performs quality-controlled, distance-based placement on a fixed reference tree. It does not replace a de novo phylogenetic reconstruction or a maximum-likelihood placement engine. The reference alignment, coordinate system, masking policy, and tree must be retained as one versioned reference package.
