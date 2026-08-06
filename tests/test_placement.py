@@ -96,6 +96,66 @@ class PlacementTests(unittest.TestCase):
         expected_edge = pruned.edge_by_child[attachment.edge_child_id]
         self.assertEqual(pruned.edge_distance_to_attachment(expected_edge, attachment), 0)
 
+    def test_patristic_distance_is_zero_at_the_exact_edge_attachment(self) -> None:
+        # Pruning A from ((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3) collapses the
+        # (A,B) ancestor: B now hangs directly off the root at 0.4, and the
+        # recorded attachment sits 0.3 from the root along that edge -- the
+        # same position the (A,B) ancestor used to occupy.
+        tree = Tree.from_newick("((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);")
+        pruned, attachment = tree.without_tip("A")
+        edge = pruned.edge_by_child[attachment.edge_child_id]
+
+        distance = pruned.patristic_distance_to_attachment(edge, attachment.distal_length, attachment)
+
+        self.assertAlmostEqual(distance, 0.0)
+
+    def test_patristic_distance_on_the_same_edge_is_the_distal_length_difference(self) -> None:
+        tree = Tree.from_newick("((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);")
+        pruned, attachment = tree.without_tip("A")
+        edge = pruned.edge_by_child[attachment.edge_child_id]
+
+        distance = pruned.patristic_distance_to_attachment(edge, 0.0, attachment)
+
+        self.assertAlmostEqual(distance, 0.3)
+
+    def test_patristic_distance_routes_through_the_shared_root_for_a_distant_edge(self) -> None:
+        # True attachment: 0.3 from the root along the root-B edge.
+        # Placed point: 0.05 from Y along the Y-C edge, where Y=(C,D) hangs
+        # 0.3 off the root. Path: attachment -> root (0.3) -> Y (0.3) -> point (0.05).
+        tree = Tree.from_newick("((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);")
+        pruned, attachment = tree.without_tip("A")
+        c_edge = pruned.edge_by_child[pruned.tips[pruned.tip_index["C"]].node_id]
+
+        distance = pruned.patristic_distance_to_attachment(c_edge, 0.05, attachment)
+
+        self.assertAlmostEqual(distance, 0.65)
+
+    def test_patristic_distance_to_a_node_attachment_from_its_own_edge(self) -> None:
+        # A polytomy leaves the pruned tip's parent as a surviving node (X)
+        # rather than collapsing it, exercising the "node" attachment kind.
+        tree = Tree.from_newick("((A:0.1,B:0.1,E:0.1):0.3,(C:0.1,D:0.1):0.3);")
+        pruned, attachment = tree.without_tip("A")
+        self.assertEqual(attachment.kind, "node")
+        b_edge = pruned.edge_by_child[pruned.tips[pruned.tip_index["B"]].node_id]
+
+        at_the_node = pruned.patristic_distance_to_attachment(b_edge, 0.0, attachment)
+        along_the_branch = pruned.patristic_distance_to_attachment(b_edge, 0.06, attachment)
+
+        self.assertAlmostEqual(at_the_node, 0.0)
+        self.assertAlmostEqual(along_the_branch, 0.06)
+
+    def test_patristic_distance_to_a_node_attachment_from_a_distant_edge(self) -> None:
+        # X (the attachment node) hangs 0.3 off the root; Y=(C,D) hangs 0.3
+        # off the root on the other side. Path: point -> Y (0.1) -> root (0.3)
+        # -> X (0.3).
+        tree = Tree.from_newick("((A:0.1,B:0.1,E:0.1):0.3,(C:0.1,D:0.1):0.3);")
+        pruned, attachment = tree.without_tip("A")
+        c_edge = pruned.edge_by_child[pruned.tips[pruned.tip_index["C"]].node_id]
+
+        distance = pruned.patristic_distance_to_attachment(c_edge, 0.1, attachment)
+
+        self.assertAlmostEqual(distance, 0.7)
+
 
 if __name__ == "__main__":
     unittest.main()
