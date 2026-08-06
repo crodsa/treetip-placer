@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import shutil
 import unittest
+from dataclasses import dataclass
 from pathlib import Path
 
 from treetip_placer.calibration_reports import write_calibration_report
+from treetip_placer.cli import summarize_clade_calibration, write_calibration_records
 
 
 SUMMARY = {
@@ -127,7 +129,66 @@ class CalibrationReportTests(unittest.TestCase):
         self.assertNotIn("No outcome counts were recorded.", document)
         self.assertIn("outcome_correct_call", document)
         self.assertIn("18", document)  # total controls
-        self.assertIn("10", document)  # classical_controls now visible in provenance
+        self.assertIn("<dt>classical_controls</dt>", document)
+        self.assertIn("<dt>cryptic_controls</dt>", document)
+
+    def test_real_panel_gate_summary_shape_renders_outcome_counts(self) -> None:
+        """Regression guard: exercises the actual cli.py code path, not a hand-written fixture.
+
+        calibrate-panel-gate has no CLI test (it needs MAFFT), so this is the only
+        guard against the summary dict losing its "summary" sub-dict again.
+        """
+
+        @dataclass
+        class FakeDecision:
+            sample_id: str
+            assignment: str
+            decision_status: str
+            classical_nearest_distance: float | None
+            cryptic_nearest_distance: float | None
+            distance_margin: float | None
+
+        decisions = (
+            FakeDecision("classical::a", "CLASSICAL", "PASS", 0.0, 0.2, 0.2),
+            FakeDecision("classical::b", "CLASSICAL", "PASS", 0.0, 0.15, 0.15),
+            FakeDecision("cryptic::c", "CLASSICAL", "PASS", 0.05, 0.2, -0.15),
+        )
+        truth_by_id = {"classical::a": "CLASSICAL", "classical::b": "CLASSICAL", "cryptic::c": "CRYPTIC"}
+        source_id_by_id = {"classical::a": "a", "classical::b": "b", "cryptic::c": "c"}
+
+        conflict_count, calibration_rows, fields = write_calibration_records(
+            self.root, decisions, truth_by_id, source_id_by_id
+        )
+        summary = {
+            "version": "0.7.0",
+            "method": "leave_one_unique_sequence_out_panel_distance_calibration",
+            "warning": "This calibrates cross-panel distance gating only.",
+            "classical_controls": 2,
+            "cryptic_controls": 1,
+            "default_threshold": 0.01,
+            "flagged_panel_label_conflicts": conflict_count,
+            "summary": summarize_clade_calibration(calibration_rows),
+            "classical_reference_alignment_sha256": "def456",
+            "cryptic_reference_alignment_sha256": "ghi789",
+        }
+
+        write_calibration_report(
+            output_directory=self.root,
+            title="Panel-gate calibration",
+            summary=summary,
+            records=calibration_rows,
+            record_columns=fields,
+            outcome_column="outcome",
+            problem_outcomes=frozenset({"INCORRECT_CALL"}),
+            artifacts=(("calibration_records.tsv", "Per-control records (TSV)"),),
+        )
+        document = (self.root / "report.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("No outcome counts were recorded.", document)
+        self.assertIn("<dt>classical_controls</dt>", document)
+        self.assertIn("<dt>cryptic_controls</dt>", document)
+        self.assertIn("<dt>flagged_panel_label_conflicts</dt>", document)
+        self.assertIn("<title>Panel-gate calibration</title>", document)
 
 
 if __name__ == "__main__":
