@@ -2,6 +2,8 @@
 
 TreeTip Placer adds query sequences to an immutable, branch-length reference tree without rebuilding its topology. It is designed exclusively for fixed-column FASTA alignments: concatenated MLST allele sequences, concatenated core genes, or core-genome SNP matrices.
 
+**Running this on your own isolates and not building or maintaining the tool?** See [`docs/MANUAL.md`](docs/MANUAL.md) for a plain-language guide to installing it, running `place-auto`, and reading the results. Everything below this point is written for whoever builds and maintains the reference packages and the tool itself.
+
 ## Scope
 
 The current backend performs quality-controlled, distance-based placement on a fixed reference tree. It does not replace a de novo phylogenetic reconstruction or a maximum-likelihood placement engine. The reference alignment, coordinate system, masking policy, and tree must be retained as one versioned reference package.
