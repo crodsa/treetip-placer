@@ -18,6 +18,7 @@ ACCURACY_RECORD_COLUMNS: tuple[str, ...] = (
     "source_sample_id",
     "outcome",
     "edge_hops_from_truth",
+    "patristic_distance_from_truth",
     "true_attachment_kind",
     "placement_status",
     "placement_edge_id",
@@ -37,10 +38,18 @@ UNGRADABLE_STATUSES = frozenset({"FAIL", "UNRESOLVED"})
 
 @dataclass(frozen=True)
 class AccuracyGrade:
-    """One control's discrete accuracy outcome and its edge-hop distance."""
+    """One control's discrete accuracy outcome, its edge-hop distance, and
+    its branch-length-weighted (patristic) distance from the true attachment.
+
+    The hop count and the patristic distance can disagree on a poorly
+    resolved tree: a placement many hops away along a chain of near-zero-
+    length branches can still sit at essentially zero patristic distance
+    from the truth. Neither is phylogenetic support.
+    """
 
     outcome: str
     edge_hops_from_truth: int | None
+    patristic_distance_from_truth: float | None
 
 
 def grade_placement_accuracy(
@@ -57,18 +66,23 @@ def grade_placement_accuracy(
     """
 
     if result.final_status in UNGRADABLE_STATUSES or result.best_fit is None:
-        return AccuracyGrade(outcome="UNRESOLVED", edge_hops_from_truth=None)
+        return AccuracyGrade(outcome="UNRESOLVED", edge_hops_from_truth=None, patristic_distance_from_truth=None)
     selected = pruned_tree.edge_by_child.get(result.best_fit.child_id)
     if selected is None:
-        return AccuracyGrade(outcome="UNRESOLVED", edge_hops_from_truth=None)
+        return AccuracyGrade(outcome="UNRESOLVED", edge_hops_from_truth=None, patristic_distance_from_truth=None)
     hops = pruned_tree.edge_distance_to_attachment(selected, attachment)
+    patristic_distance = pruned_tree.patristic_distance_to_attachment(
+        selected, result.best_fit.distal_length, attachment
+    )
     if hops == 0:
         outcome = "CORRECT"
     elif hops <= near_hop_threshold:
         outcome = "NEAR"
     else:
         outcome = "FAR"
-    return AccuracyGrade(outcome=outcome, edge_hops_from_truth=hops)
+    return AccuracyGrade(
+        outcome=outcome, edge_hops_from_truth=hops, patristic_distance_from_truth=patristic_distance
+    )
 
 
 def build_accuracy_record(
@@ -84,6 +98,7 @@ def build_accuracy_record(
         "source_sample_id": source_sample_id,
         "outcome": grade.outcome,
         "edge_hops_from_truth": grade.edge_hops_from_truth,
+        "patristic_distance_from_truth": grade.patristic_distance_from_truth,
         "true_attachment_kind": attachment.kind,
         "placement_status": result.final_status,
         "placement_edge_id": best.edge_id if best else None,
@@ -128,3 +143,31 @@ def hop_distribution(records: Sequence[Mapping[str, object]]) -> dict[str, int]:
             key=lambda item: (item[0] == "unresolved", int(item[0]) if item[0] != "unresolved" else 0),
         )
     )
+
+
+def summarize_patristic_distance(records: Sequence[Mapping[str, object]]) -> dict[str, float | int | None]:
+    """Summarize the branch-length-weighted distance over graded controls.
+
+    Complements hop_distribution: on a poorly resolved tree the hop count can
+    look bad while the underlying genetic distance recovered stays small, and
+    this summary is what makes that visible without re-running the calibration.
+    """
+
+    distances = sorted(
+        float(record["patristic_distance_from_truth"])
+        for record in records
+        if record["patristic_distance_from_truth"] is not None
+    )
+    if not distances:
+        return {"graded_controls": 0, "mean": None, "median": None, "max": None}
+    midpoint = len(distances) // 2
+    if len(distances) % 2 == 0:
+        median = (distances[midpoint - 1] + distances[midpoint]) / 2
+    else:
+        median = distances[midpoint]
+    return {
+        "graded_controls": len(distances),
+        "mean": sum(distances) / len(distances),
+        "median": median,
+        "max": distances[-1],
+    }
