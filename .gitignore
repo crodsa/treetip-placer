@@ -11,3 +11,4 @@ output/
 results/
 *.log
 .tools/
+.DS_Store

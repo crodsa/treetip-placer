@@ -11,6 +11,24 @@ from treetip_placer.models import AlignedSequence
 
 
 class CliTests(unittest.TestCase):
+    def test_package_version_matches_pyproject(self) -> None:
+        """Pin __init__.__version__ to pyproject.toml so a version bump cannot update one and not the other.
+
+        __version__ is stamped into --version and into the provenance block of
+        every calibration report and summary JSON; a mismatch silently mislabels
+        every artifact a released version produces.
+        """
+
+        import tomllib
+
+        from treetip_placer import __version__
+
+        pyproject = tomllib.loads(
+            (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(__version__, pyproject["project"]["version"])
+
     def test_alignment_placement_writes_outputs(self) -> None:
         fixtures = Path("tests/fixtures")
         output = Path.cwd() / ".treetip-alignment-test-output"
@@ -82,6 +100,9 @@ class CliTests(unittest.TestCase):
             self.assertTrue((output / "clade_confusion.tsv").is_file())
             self.assertTrue((output / "clade_calibration_exclusions.tsv").is_file())
             self.assertTrue((output / "clade_calibration_summary.json").is_file())
+            self.assertTrue((output / "report.html").is_file())
+            report = (output / "report.html").read_text(encoding="utf-8")
+            self.assertIn("Clade-assignment calibration", report)
         finally:
             if root.exists():
                 shutil.rmtree(root)

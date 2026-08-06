@@ -22,6 +22,7 @@ from .alignment import (
     require_matching_alignment_widths,
     write_fasta_records,
 )
+from .calibration_reports import write_calibration_report
 from .clade_assignment import (
     assign_phylogenetic_clades,
     load_tip_clades,
@@ -31,6 +32,13 @@ from .models import AlignedSequence, PlacementConfig, PlacementResult, RunMetada
 from .outputs import render_placed_tree, write_run_outputs
 from .panel_selection import PanelDecision, choose_reference_panel, write_panel_selection_outputs
 from .placement import place_query
+from .placement_accuracy import (
+    ACCURACY_RECORD_COLUMNS,
+    build_accuracy_record,
+    grade_placement_accuracy,
+    hop_distribution,
+    summarize_placement_accuracy,
+)
 from .reference_package import (
     PanelReference,
     PairedReferencePackage,
@@ -186,6 +194,30 @@ def build_parser() -> argparse.ArgumentParser:
     )
     clade_calibration.add_argument("--output", required=True, help="New, empty output directory.")
     add_placement_controls(clade_calibration)
+
+    accuracy = subparsers.add_parser(
+        "calibrate-placement-accuracy",
+        help="Measure whether leave-one-out placement recovers a held-out reference tip's position.",
+    )
+    accuracy.add_argument("--tree", required=True, help="Reference branch-length Newick tree.")
+    accuracy.add_argument(
+        "--reference-alignment", required=True, help="Reference fixed-column FASTA alignment."
+    )
+    accuracy.add_argument(
+        "--max-controls",
+        type=positive_integer,
+        default=50,
+        help="Maximum deterministic unique-sequence controls evaluated.",
+    )
+    accuracy.add_argument(
+        "--near-hop-threshold",
+        type=positive_integer,
+        default=2,
+        help="Largest edge-hop distance still reported as NEAR; provisional and uncalibrated.",
+    )
+    accuracy.add_argument("--output", required=True, help="New, empty output directory.")
+    add_placement_controls(accuracy)
+
     calibrate.add_argument("--mafft", required=True, help="MAFFT executable or wrapper for cross-panel mapping.")
     calibrate.add_argument("--mafft-threads", type=positive_integer, default=1, help="MAFFT threads per mapping.")
     calibrate.add_argument(
@@ -317,6 +349,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_calibrate_panel_gate(arguments)
         if arguments.command == "calibrate-clade-assignment":
             return run_calibrate_clade_assignment(arguments)
+        if arguments.command == "calibrate-placement-accuracy":
+            return run_calibrate_placement_accuracy(arguments)
         if arguments.command == "create-reference-package":
             return run_create_reference_package(arguments)
         if arguments.command == "validate-reference-package":
@@ -652,6 +686,42 @@ def resolve_auto_reference_inputs(
     return package, threshold
 
 
+def build_panel_gate_summary(
+    *,
+    classical_controls_count: int,
+    cryptic_controls_count: int,
+    default_threshold: float,
+    conflict_count: int,
+    sweep: Sequence[dict[str, object]],
+    calibration_rows: Sequence[dict[str, object]],
+    classical_reference_alignment_sha256: str,
+    cryptic_reference_alignment_sha256: str,
+) -> dict[str, object]:
+    """Build the panel-gate calibration provenance and outcome summary.
+
+    Extracted as a pure function so the outcome-count contract this feeds to
+    write_calibration_report can be exercised by a test without requiring
+    MAFFT, which run_calibrate_panel_gate otherwise depends on end to end.
+    """
+
+    return {
+        "version": __version__,
+        "method": "leave_one_unique_sequence_out_panel_distance_calibration",
+        "warning": "This calibrates cross-panel distance gating only; it is not external validation or topology-placement accuracy.",
+        "classical_controls": classical_controls_count,
+        "cryptic_controls": cryptic_controls_count,
+        "default_threshold": default_threshold,
+        "flagged_panel_label_conflicts": conflict_count,
+        "default_result": next(
+            row for row in sweep if row["threshold"] == default_threshold
+        ),
+        "threshold_sweep": sweep,
+        "summary": summarize_clade_calibration(calibration_rows),
+        "classical_reference_alignment_sha256": classical_reference_alignment_sha256,
+        "cryptic_reference_alignment_sha256": cryptic_reference_alignment_sha256,
+    }
+
+
 def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
     """Calibrate panel assignment on internal controls without topology placement."""
 
@@ -733,30 +803,42 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
     decisions = choose_reference_panel(
         classical_results, cryptic_results, arguments.min_panel_distance_separation
     )
-    conflict_count = write_calibration_records(output, decisions, truth_by_id, source_id_by_id)
+    conflict_count, calibration_rows, calibration_fields = write_calibration_records(
+        output, decisions, truth_by_id, source_id_by_id
+    )
     sweep = panel_threshold_sweep(
         classical_results,
         cryptic_results,
         truth_by_id,
         arguments.min_panel_distance_separation,
     )
-    summary = {
-        "version": __version__,
-        "method": "leave_one_unique_sequence_out_panel_distance_calibration",
-        "warning": "This calibrates cross-panel distance gating only; it is not external validation or topology-placement accuracy.",
-        "classical_controls": len(classical_controls),
-        "cryptic_controls": len(cryptic_controls),
-        "default_threshold": arguments.min_panel_distance_separation,
-        "flagged_panel_label_conflicts": conflict_count,
-        "default_result": next(
-            row for row in sweep if row["threshold"] == arguments.min_panel_distance_separation
-        ),
-        "threshold_sweep": sweep,
-        "classical_reference_alignment_sha256": file_sha256(arguments.classical_reference_alignment),
-        "cryptic_reference_alignment_sha256": file_sha256(arguments.cryptic_reference_alignment),
-    }
+    summary = build_panel_gate_summary(
+        classical_controls_count=len(classical_controls),
+        cryptic_controls_count=len(cryptic_controls),
+        default_threshold=arguments.min_panel_distance_separation,
+        conflict_count=conflict_count,
+        sweep=sweep,
+        calibration_rows=calibration_rows,
+        classical_reference_alignment_sha256=file_sha256(arguments.classical_reference_alignment),
+        cryptic_reference_alignment_sha256=file_sha256(arguments.cryptic_reference_alignment),
+    )
     (output / "calibration_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    write_calibration_report(
+        output,
+        "Panel-gate calibration",
+        summary,
+        calibration_rows,
+        calibration_fields,
+        "outcome",
+        frozenset({"INCORRECT_CALL"}),
+        (
+            ("calibration_records.tsv", "Per-control records (TSV)"),
+            ("panel_label_conflicts.tsv", "Flagged label conflicts (TSV)"),
+            ("calibration_summary.json", "Calibration summary (JSON)"),
+        ),
+        threshold_sweep=sweep,
     )
     logger.event(1, "calibration", "Completed panel-gate calibration", **summary["default_result"])
     (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
@@ -973,6 +1055,21 @@ def write_clade_calibration_outputs(
     (output / "clade_calibration_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+    write_calibration_report(
+        output,
+        "Clade-assignment calibration",
+        summary,
+        records,
+        fields,
+        "outcome",
+        frozenset({"INCORRECT_CALL"}),
+        (
+            ("clade_calibration_records.tsv", "Per-control records (TSV)"),
+            ("clade_confusion.tsv", "Clade confusion counts (TSV)"),
+            ("clade_calibration_exclusions.tsv", "Excluded singleton clades (TSV)"),
+            ("clade_calibration_summary.json", "Calibration summary (JSON)"),
+        ),
+    )
 
 
 def summarize_clade_calibration(records: Sequence[dict[str, object]]) -> dict[str, int]:
@@ -999,6 +1096,125 @@ def summarize_clade_calibration_by_truth(
         key = f"outcome_{outcome}"
         counts[key] = counts.get(key, 0) + 1
     return {clade: summary[clade] for clade in sorted(summary)}
+
+
+def run_calibrate_placement_accuracy(arguments: argparse.Namespace) -> int:
+    """Measure whether leave-one-out placement recovers a held-out tip's position.
+
+    Each control is removed from both the immutable backbone tree and the
+    reference alignment, placed back with the production placement path, and
+    graded in edge hops against its recorded attachment. This is an internal
+    topology diagnostic, not phylogenetic support or external validation.
+    """
+
+    logger = EventLogger(arguments.verbose)
+    logger.event(1, "start", "Starting leave-one-out placement-accuracy calibration", version=__version__)
+    output = prepare_output_directory(arguments.output)
+    tree = Tree.from_path(arguments.tree, arguments.max_cache_megabytes)
+    if len(tree.tips) < 4:
+        raise ValueError("Placement-accuracy calibration requires at least four reference tips")
+    alignment = read_fasta_alignment(arguments.reference_alignment)
+    reference_by_id = {sequence.sample_id: sequence for sequence in alignment.sequences}
+    tree_tip_names = set(tree.tip_index)
+    alignment_names = set(reference_by_id)
+    if tree_tip_names != alignment_names:
+        missing_in_alignment = sorted(tree_tip_names - alignment_names)
+        missing_in_tree = sorted(alignment_names - tree_tip_names)
+        details: list[str] = []
+        if missing_in_alignment:
+            details.append("tips absent from the alignment: " + ", ".join(missing_in_alignment[:10]))
+        if missing_in_tree:
+            details.append("alignment IDs absent from the tree: " + ", ".join(missing_in_tree[:10]))
+        raise ValueError("Reference tree and alignment IDs differ; " + "; ".join(details))
+
+    controls = tuple(
+        sequence.sample_id
+        for sequence in select_unique_sequence_controls(alignment.sequences, arguments.max_controls)
+    )
+    logger.event(
+        1,
+        "input",
+        "Selected unique-sequence leave-one-out controls",
+        reference_tips=len(tree.tips),
+        controls=len(controls),
+        near_hop_threshold=arguments.near_hop_threshold,
+    )
+    config = placement_config_from_arguments(arguments)
+    records: list[dict[str, object]] = []
+    for number, held_out_id in enumerate(controls, start=1):
+        pruned_tree, attachment = tree.without_tip(held_out_id)
+        pruned_references = tuple(
+            reference_by_id[tip.name or ""] for tip in pruned_tree.tips
+        )
+        result = place_query(reference_by_id[held_out_id], pruned_references, pruned_tree, config)
+        grade = grade_placement_accuracy(
+            result, pruned_tree, attachment, arguments.near_hop_threshold
+        )
+        records.append(build_accuracy_record(result, grade, attachment, held_out_id))
+        if number == len(controls) or number % 10 == 0:
+            logger.event(
+                2, "calibration", "Completed leave-one-out controls", completed=number, controls=len(controls)
+            )
+
+    summary = write_placement_accuracy_outputs(output, records, arguments, tree, alignment)
+    logger.event(1, "calibration", "Completed placement-accuracy calibration", **summary["summary"])
+    (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
+    logger.event(1, "complete", "Placement-accuracy calibration completed")
+    append_final_event(output, logger.events[-1])
+    return 0
+
+
+def write_placement_accuracy_outputs(
+    output: Path,
+    records: Sequence[dict[str, object]],
+    arguments: argparse.Namespace,
+    tree: Tree,
+    alignment: object,
+) -> dict[str, object]:
+    """Write auditable per-control records and a provenance summary."""
+
+    with (output / "placement_accuracy_records.tsv").open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=list(ACCURACY_RECORD_COLUMNS), delimiter="\t", lineterminator="\n"
+        )
+        writer.writeheader()
+        for record in records:
+            writer.writerow({key: "" if value is None else value for key, value in record.items()})
+    summary = {
+        "version": __version__,
+        "method": "fixed_tree_leave_one_unique_sequence_out_placement_accuracy",
+        "warning": (
+            "Internal topology diagnostics only: this is not phylogenetic support, "
+            "not a branch-length error, and not evidence of external generalization."
+        ),
+        "tree_path": str(Path(arguments.tree).resolve()),
+        "tree_sha256": file_sha256(arguments.tree),
+        "reference_alignment_path": str(Path(arguments.reference_alignment).resolve()),
+        "reference_alignment_sha256": file_sha256(arguments.reference_alignment),
+        "reference_tips": len(tree.tips),
+        "reference_columns": getattr(alignment, "site_count"),
+        "max_controls": arguments.max_controls,
+        "near_hop_threshold": arguments.near_hop_threshold,
+        "summary": summarize_placement_accuracy(records),
+        "hop_distribution": hop_distribution(records),
+    }
+    (output / "placement_accuracy_summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    write_calibration_report(
+        output,
+        "Placement-accuracy calibration",
+        summary,
+        records,
+        ACCURACY_RECORD_COLUMNS,
+        "outcome",
+        frozenset({"FAR"}),
+        (
+            ("placement_accuracy_records.tsv", "Per-control records (TSV)"),
+            ("placement_accuracy_summary.json", "Calibration summary (JSON)"),
+        ),
+    )
+    return summary
 
 
 def select_unique_sequence_controls(
@@ -1096,14 +1312,20 @@ def write_calibration_records(
     decisions: Sequence[object],
     truth_by_id: dict[str, str],
     source_id_by_id: dict[str, str],
-) -> int:
-    """Write one auditable calibration record per held-out panel control."""
+) -> tuple[int, list[dict[str, object]], tuple[str, ...]]:
+    """Write one auditable calibration record per held-out panel control.
+
+    Returns the flagged-conflict count, the rows written, and the column
+    order used, so a report can render them without re-reading the file or
+    restating the column list.
+    """
 
     fields = [
         "calibration_id", "source_sample_id", "truth", "assignment", "decision_status",
         "outcome", "classical_nearest_distance", "cryptic_nearest_distance", "distance_margin",
     ]
     conflicts: list[dict[str, object]] = []
+    written_rows: list[dict[str, object]] = []
     with (output_directory / "calibration_records.tsv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
         writer.writeheader()
@@ -1127,13 +1349,14 @@ def write_calibration_records(
             for field in ("classical_nearest_distance", "cryptic_nearest_distance", "distance_margin"):
                 row[field] = "" if row[field] is None else format(row[field], ".12g")
             writer.writerow(row)
+            written_rows.append(row)
             if outcome == "INCORRECT_CALL":
                 conflicts.append(row)
     with (output_directory / "panel_label_conflicts.tsv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
         writer.writeheader()
         writer.writerows(conflicts)
-    return len(conflicts)
+    return len(conflicts), written_rows, tuple(fields)
 
 
 def map_queries_to_panel(
@@ -1332,147 +1555,6 @@ def placement_config_from_arguments(arguments: argparse.Namespace) -> PlacementC
         outlier_distance=arguments.outlier_distance,
         unresolved_weight=arguments.unresolved_weight,
         force=arguments.force,
-    )
-
-
-def run_validate_mlst(arguments: argparse.Namespace) -> int:
-    """Hold out known MLST references to calibrate placement and QC behavior."""
-
-    logger = EventLogger(arguments.verbose)
-    logger.event(1, "start", "Starting MLST leave-one-out validation", version=__version__)
-    output = prepare_output_directory(arguments.output)
-    tree = Tree.from_path(arguments.tree, arguments.max_cache_megabytes)
-    if len(tree.tips) < 4:
-        raise ValueError("MLST leave-one-out validation requires at least four reference tips")
-    references = read_profile_table(arguments.reference_profiles)
-    require_reference_profiles_complete(references)
-    tree_tip_names = set(tree.tip_index)
-    reference_by_id = references.by_id
-    reference_names = set(reference_by_id)
-    if tree_tip_names != reference_names:
-        missing_in_profiles = sorted(tree_tip_names - reference_names)
-        missing_in_tree = sorted(reference_names - tree_tip_names)
-        details: list[str] = []
-        if missing_in_profiles:
-            details.append("tips absent from reference profiles: " + ", ".join(missing_in_profiles[:10]))
-        if missing_in_tree:
-            details.append("profile IDs absent from tree: " + ", ".join(missing_in_tree[:10]))
-        raise ValueError("Reference tree and data IDs differ; " + "; ".join(details))
-    references_in_tip_order = tuple(
-        reference_by_id[tip.name or ""] for tip in tree.tips
-    )
-    holdout_ids = select_holdout_ids(
-        references_in_tip_order, arguments.max_holdouts, arguments.seed
-    )
-    config = PlacementConfig(
-        preset=arguments.preset,
-        candidate_count=arguments.candidate_count,
-        candidate_hops=arguments.candidate_hops,
-        bootstrap_replicates=arguments.bootstrap,
-        bootstrap_seed=arguments.seed,
-        min_coverage=arguments.min_coverage,
-        warn_coverage=arguments.warn_coverage,
-        min_comparable_loci=arguments.min_comparable_loci,
-        outlier_distance=arguments.outlier_distance,
-        unresolved_weight=arguments.unresolved_weight,
-    )
-    workers = resolve_threads(arguments.threads, len(holdout_ids))
-    logger.event(
-        1,
-        "validation",
-        "Validated MLST reference panel",
-        reference_tips=len(references_in_tip_order),
-        holdouts=len(holdout_ids),
-        loci=len(references.loci),
-        workers=workers,
-        preset=config.preset,
-    )
-    started_validation = time.perf_counter()
-
-    def validation_progress(completed: int, total: int) -> None:
-        log_progress(logger, completed, total, started_validation, stage="validation")
-
-    if workers == 1:
-        records = run_serial_validation(
-            holdout_ids,
-            tree,
-            references_in_tip_order,
-            config,
-            validation_progress,
-        )
-    else:
-        try:
-            records = run_parallel_validation(
-                holdout_ids,
-                tree.newick(),
-                references_in_tip_order,
-                config,
-                arguments.max_cache_megabytes,
-                workers,
-                validation_progress,
-            )
-        except PermissionError as error:
-            logger.event(
-                1,
-                "validation",
-                "Parallel workers are unavailable in this environment; falling back to serial validation",
-                error=str(error),
-            )
-            workers = 1
-            records = run_serial_validation(
-                holdout_ids,
-                tree,
-                references_in_tip_order,
-                config,
-                validation_progress,
-            )
-    summary = summarize_validation(records)
-    logger.event(1, "validation", "Completed MLST leave-one-out validation", **summary)
-    manifest = {
-        "version": __version__,
-        "validation_method": "pruned_leave_one_out_mlst",
-        "tree_path": str(Path(arguments.tree).resolve()),
-        "reference_profiles_path": str(Path(arguments.reference_profiles).resolve()),
-        "tree_sha256": file_sha256(arguments.tree),
-        "reference_profiles_sha256": file_sha256(arguments.reference_profiles),
-        "config": {**asdict(config), "workers": workers, "max_holdouts": arguments.max_holdouts},
-    }
-    logger.event(1, "output", "Writing validation outputs", directory=str(output))
-    logger.event(1, "complete", "Validation run completed", **summary)
-    write_validation_outputs(output, records, summary, manifest, logger.events)
-    (output / "run.log").write_text(format_event_log(logger.events), encoding="utf-8")
-    return 0
-
-
-def load_input_adapter(
-    arguments: argparse.Namespace,
-) -> tuple[ProfileTable, tuple[Profile, ...], str, tuple[str, ...]]:
-    """Load either categorical MLST tables or fixed-column FASTA alignments."""
-
-    profile_arguments = (arguments.reference_profiles, arguments.query_profiles)
-    alignment_arguments = (arguments.reference_alignment, arguments.query_alignment)
-    using_profiles = all(profile_arguments)
-    using_alignment = all(alignment_arguments)
-    if using_profiles == using_alignment:
-        raise ValueError(
-            "Provide exactly one complete input pair: --reference-profiles/--query-profiles "
-            "or --reference-alignment/--query-alignment."
-        )
-    if using_profiles:
-        references = read_profile_table(arguments.reference_profiles)
-        require_reference_profiles_complete(references)
-        raw_queries = read_profile_table(arguments.query_profiles)
-        projected_queries, absent_loci, _ = project_queries_to_reference(raw_queries, references.loci)
-        return references, projected_queries.profiles, "mlst_allele_profiles", absent_loci
-
-    reference_alignment = read_fasta_alignment(arguments.reference_alignment)
-    query_alignment = read_fasta_alignment(arguments.query_alignment)
-    require_matching_alignment_widths(reference_alignment, query_alignment)
-    return (
-        ProfileTable(loci=(), profiles=reference_alignment.profiles),
-        query_alignment.profiles,
-        "fixed_column_fasta_alignment",
-        (),
     )
 
 

@@ -100,6 +100,23 @@ treetip calibrate-panel-gate \
 
 This writes `calibration_records.tsv`, `panel_label_conflicts.tsv`, and `calibration_summary.json`, including a fixed threshold sweep. The conflict table flags high-confidence calls that disagree with the control panel label for provenance review; it never changes source labels or reference membership. The command evaluates the panel-assignment gate only; it does not estimate external generalization, tree-placement accuracy, or phylogenetic support.
 
+Measure whether leave-one-out placement recovers a held-out reference tip's own position:
+
+```bash
+treetip calibrate-placement-accuracy \
+  --tree cryptic/tree.nwk \
+  --reference-alignment cryptic/aligned.fasta \
+  --max-controls 50 \
+  --near-hop-threshold 2 \
+  --output cryptic_placement_accuracy \
+  --preset thorough \
+  --verbose
+```
+
+For each control, the command removes its tip from the fixed tree and its sequence from the reference alignment, places it back through the production placement path, and compares the selected edge with the pruned tip's recorded attachment. `placement_accuracy_records.tsv` reports `CORRECT` for an exact recovery, `NEAR` within `--near-hop-threshold` edge hops, `FAR` beyond it, and `UNRESOLVED` when placement QC produced no defensible call. `placement_accuracy_summary.json` adds the full `hop_distribution`, so the threshold can be re-evaluated without repeating the run. The `--near-hop-threshold` default of `2` is provisional and uncalibrated; treat it as a starting point and set it from an observed hop distribution. This is an unweighted topology diagnostic on a fixed backbone: it is not phylogenetic support, not a branch-length error, and not evidence of external generalization.
+
+Every calibration command also writes a `report.html` index carrying the run's provenance, scope warning, outcome counts, and per-control table; the TSV and JSON sidecars remain authoritative.
+
 ## Quick start
 
 ```bash
