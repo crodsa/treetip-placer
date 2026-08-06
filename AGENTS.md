@@ -15,7 +15,7 @@ The current backend uses categorical-distance weighted least squares for fixed-c
 - Treat each FASTA column as an immutable reference coordinate; do not silently realign, trim, or pad inputs.
 - Do not silently drop invalid or incomplete queries; report `PASS`, `WARN`, `FAIL`, or `UNRESOLVED` with explicit reasons.
 - Keep drawing-oriented Newick free of overloaded confidence labels. Store uncertainty and QC in sidecar tables and JSON.
-- Do not add real genomic or alignment data to version control unless redistribution permission is explicit.
+- Do not add real genomic or alignment data to version control unless redistribution permission is explicit. The bundled reference package under `reference-packages/` is a documented exception: the repository owner gave explicit permission to commit it (see `docs/HANDOFF.md` "Current reference panel"). That permission does not extend to raw genome assemblies, any other dataset, or any future update to this package without the same explicit confirmation.
 
 ## Verification
 
