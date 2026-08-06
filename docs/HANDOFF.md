@@ -1,6 +1,6 @@
 # Project handoff
 
-Last updated: 2026-08-01
+Last updated: 2026-08-05
 
 ## Purpose
 
@@ -15,6 +15,8 @@ TreeTip Placer places aligned nucleotide sequences on an immutable reference tre
 - `place-auto` maps an uploaded FASTA independently to paired classical and cryptic references with MAFFT `--add --keeplength`, runs both placements, and writes an auditable conservative panel assignment plus selected-panel trees.
 - Tip-clade metadata can be checksummed inside a paired-reference package; package-bound metadata loads automatically unless a run explicitly supplies another TSV.
 - `calibrate-clade-assignment` performs deterministic labelled leave-one-unique-sequence-out controls against a fixed tree, writing record-level outcomes and a clade confusion table without recalculating topology or phylogenetic support.
+- `calibrate-placement-accuracy` grades leave-one-out placement geometry against each control's recorded attachment in edge hops, writing per-control records, a hop distribution, and an HTML report.
+- All three calibration commands write a `report.html` index beside their authoritative TSV and JSON sidecars.
 
 ## Important limitations
 
@@ -22,6 +24,7 @@ TreeTip Placer places aligned nucleotide sequences on an immutable reference tre
 - Queries must already use the immutable reference alignment coordinates.
 - Relative-fit weights are heuristic, not likelihood weight ratios or posterior probabilities.
 - Reference-panel QC thresholds require local calibration and cannot be transferred blindly between cryptic-only and mixed cryptic–classical panels.
+- The placement-accuracy grade is an unweighted topology diagnostic on a fixed backbone, not phylogenetic support or branch-length error. The `--near-hop-threshold` default of 2 is provisional and has not been calibrated against real panels.
 
 ## Verified command
 
@@ -74,8 +77,9 @@ The target reference definition is seven ANI-defined clades in each panel: seven
 3. Decide whether systematic `WARN` calls in the classical calibration reflect appropriate conservative QC thresholds or require a separately validated confidence policy.
 4. Obtain an independent classical test set, especially clade-1/2 boundary isolates, before introducing any clade-specific confidence promotion or suppression rule.
 5. Run broader local clade calibration after independently adding labels for currently singleton/unlabelled cryptic neighborhoods, particularly C-VI.
-6. Add alignment leave-one-out validation and panel-pair calibration reports.
+6. Run `calibrate-placement-accuracy` on the private classical and cryptic panels, then set `--near-hop-threshold` from the observed hop distribution instead of the provisional default of 2.
 7. Run FastBAPS in a supported reproducible environment for each private reference alignment, constrain/reconcile the result to the seven ANI-defined clades per panel, and create a complete, checksummed reference-tip TSV with `expected_clade_count: 7`.
+8. Enrich the production `place-auto` and `place` `report.html` with the per-query quantitative metrics that currently live only in the sidecar TSV — coverage, comparable sites, RMSE, objective, and bootstrap support — so an end user reads one document instead of opening tables alongside it.
 
 ## Repository state
 
