@@ -343,6 +343,66 @@ class Tree:
             )
         raise ValueError(f"Unknown attachment kind '{attachment.kind}'")
 
+    def patristic_distance_to_attachment(
+        self, edge: Edge, distal_length: float, attachment: PrunedTipAttachment
+    ) -> float:
+        """Return the branch-length-weighted distance from a placed point to a true attachment.
+
+        A point on ``edge`` at ``distal_length`` from its parent, and the
+        attachment point recorded by ``without_tip``, can each only be reached
+        from the rest of the tree through the two ends of their own edge (or,
+        for a node attachment, through the node itself). Distance is therefore
+        the minimum over those endpoint combinations; the tree's single-path
+        property makes every other combination strictly longer, so the
+        minimum always selects the one true path. This complements
+        ``edge_distance_to_attachment``'s topology-only hop count with a
+        continuous measure: an edge many hops away along a chain of
+        near-zero-length branches is not scored as far as one of equal hop
+        count on long branches. It remains a topology diagnostic, not a
+        phylogenetic support value.
+
+        When both points sit on the same edge, routing through an endpoint
+        would retrace that shared segment and double-count it, exactly the
+        degenerate case ``edge_distance_to_attachment`` also special-cases;
+        the direct distal-length difference is used instead.
+        """
+
+        if (
+            attachment.kind == "edge"
+            and attachment.edge_parent_id == edge.parent_id
+            and attachment.edge_child_id == edge.child_id
+        ):
+            return abs(distal_length - (attachment.distal_length or 0.0))
+        placed_from_parent = distal_length + self._distance_to_attachment(edge.parent_id, attachment)
+        placed_from_child = (edge.length - distal_length) + self._distance_to_attachment(
+            edge.child_id, attachment
+        )
+        return min(placed_from_parent, placed_from_child)
+
+    def _distance_to_attachment(self, node_id: int, attachment: PrunedTipAttachment) -> float:
+        """Return the weighted distance from one node to a true attachment."""
+
+        if attachment.kind == "node":
+            if attachment.node_id is None:
+                raise ValueError("Node attachment is missing a node ID")
+            return self._weighted_node_distance(node_id, attachment.node_id)
+        if attachment.kind == "edge":
+            if attachment.edge_parent_id is None or attachment.edge_child_id is None:
+                raise ValueError("Edge attachment is missing edge node IDs")
+            if attachment.distal_length is None:
+                raise ValueError("Edge attachment is missing a distal length")
+            attachment_edge = self.edge_by_nodes[
+                frozenset((attachment.edge_parent_id, attachment.edge_child_id))
+            ]
+            via_parent = attachment.distal_length + self._weighted_node_distance(
+                node_id, attachment.edge_parent_id
+            )
+            via_child = (attachment_edge.length - attachment.distal_length) + self._weighted_node_distance(
+                node_id, attachment.edge_child_id
+            )
+            return min(via_parent, via_child)
+        raise ValueError(f"Unknown attachment kind '{attachment.kind}'")
+
     def tip_span(self, node_id: int) -> tuple[int, int]:
         """Return the contiguous DFS tip-index span below one node."""
 
@@ -390,6 +450,30 @@ class Tree:
         for node_id in queue:
             next_distance = distances[node_id] + 1
             for neighbor_id, _ in self.adjacency[node_id]:
+                if neighbor_id == end_id:
+                    return next_distance
+                if neighbor_id not in distances:
+                    distances[neighbor_id] = next_distance
+                    queue.append(neighbor_id)
+        raise ValueError("Tree nodes are disconnected")
+
+    def _weighted_node_distance(self, start_id: int, end_id: int) -> float:
+        """Return branch-length-weighted distance between two nodes in this tree.
+
+        A tree has exactly one path between any two nodes, so a plain BFS
+        accumulating branch length (rather than Dijkstra's priority queue)
+        already finds the unique shortest path, mirroring ``_node_distance``.
+        """
+
+        if start_id == end_id:
+            return 0.0
+        if start_id not in self.adjacency or end_id not in self.adjacency:
+            raise ValueError("Attachment node is not present in the pruned tree")
+        queue = [start_id]
+        distances = {start_id: 0.0}
+        for node_id in queue:
+            for neighbor_id, branch_length in self.adjacency[node_id]:
+                next_distance = distances[node_id] + branch_length
                 if neighbor_id == end_id:
                     return next_distance
                 if neighbor_id not in distances:

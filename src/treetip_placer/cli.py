@@ -37,6 +37,7 @@ from .placement_accuracy import (
     build_accuracy_record,
     grade_placement_accuracy,
     hop_distribution,
+    summarize_patristic_distance,
     summarize_placement_accuracy,
 )
 from .reference_package import (
@@ -1197,6 +1198,7 @@ def write_placement_accuracy_outputs(
         "near_hop_threshold": arguments.near_hop_threshold,
         "summary": summarize_placement_accuracy(records),
         "hop_distribution": hop_distribution(records),
+        "patristic_distance_summary": summarize_patristic_distance(records),
     }
     (output / "placement_accuracy_summary.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"

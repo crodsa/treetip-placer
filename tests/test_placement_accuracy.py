@@ -9,6 +9,7 @@ from treetip_placer.placement import place_query
 from treetip_placer.placement_accuracy import (
     grade_placement_accuracy,
     hop_distribution,
+    summarize_patristic_distance,
     summarize_placement_accuracy,
 )
 from treetip_placer.tree import Tree
@@ -52,23 +53,37 @@ def grade_holdout(newick: str, sequences: dict[str, object], held_out: str, near
         preset="thorough", min_coverage=0.5, min_comparable_sites=2, unresolved_weight=0.0
     )
     result = place_query(by_id[held_out], references, pruned, config)
-    return grade_placement_accuracy(result, pruned, attachment, near_hop_threshold), attachment
+    grade = grade_placement_accuracy(result, pruned, attachment, near_hop_threshold)
+    return grade, attachment, pruned, result
 
 
 class PlacementAccuracyTests(unittest.TestCase):
     def test_recovered_attachment_grades_correct_with_zero_hops(self) -> None:
-        grade, attachment = grade_holdout(
+        grade, attachment, pruned, result = grade_holdout(
             "((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);", CONCORDANT_SEQUENCES, "A", 2
         )
 
         self.assertEqual(grade.outcome, "CORRECT")
         self.assertEqual(grade.edge_hops_from_truth, 0)
         self.assertEqual(attachment.kind, "edge")
+        # 0 hops means the correct edge was selected, not that the WLS fit's
+        # distal_length exactly reproduces the original attachment point: A's
+        # sequence is one character from B's, so the fitted position can sit
+        # a little off it. patristic_distance_from_truth must match what
+        # Tree computes independently for that same edge and distal_length —
+        # a wiring check, since the distance math itself is proven in
+        # test_placement.py's hand-computed cases.
+        selected_edge = pruned.edge_by_child[result.best_fit.child_id]
+        expected_distance = pruned.patristic_distance_to_attachment(
+            selected_edge, result.best_fit.distal_length, attachment
+        )
+        self.assertAlmostEqual(grade.patristic_distance_from_truth, expected_distance)
+        self.assertGreaterEqual(grade.patristic_distance_from_truth, 0.0)
 
     def test_node_kind_attachment_is_graded(self) -> None:
         # A polytomy leaves a node with two surviving children after pruning,
         # exercising the 'node' branch of edge_distance_to_attachment.
-        grade, attachment = grade_holdout(
+        grade, attachment, _, _ = grade_holdout(
             "((A:0.1,B:0.1,E:0.1):0.3,(C:0.1,D:0.1):0.3);",
             {**CONCORDANT_SEQUENCES, "E": "AAAATT"},
             "A",
@@ -78,17 +93,22 @@ class PlacementAccuracyTests(unittest.TestCase):
         self.assertEqual(attachment.kind, "node")
         self.assertEqual(grade.outcome, "CORRECT")
         self.assertEqual(grade.edge_hops_from_truth, 0)
+        self.assertGreaterEqual(grade.patristic_distance_from_truth, 0.0)
 
     def test_displaced_placement_grades_near_within_the_threshold(self) -> None:
-        grade, _ = grade_holdout(
+        grade, _, _, _ = grade_holdout(
             "((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);", DISCORDANT_SEQUENCES, "A", 2
         )
 
         self.assertEqual(grade.edge_hops_from_truth, 2)
         self.assertEqual(grade.outcome, "NEAR")
+        # Displaced onto a different subtree entirely: strictly further than
+        # the near-zero distance an exact recovery gets, confirming the field
+        # is wired to a real distance rather than a placeholder.
+        self.assertGreater(grade.patristic_distance_from_truth, 0.05)
 
     def test_the_same_placement_grades_far_under_a_stricter_threshold(self) -> None:
-        grade, _ = grade_holdout(
+        grade, _, _, _ = grade_holdout(
             "((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);", DISCORDANT_SEQUENCES, "A", 1
         )
 
@@ -96,7 +116,7 @@ class PlacementAccuracyTests(unittest.TestCase):
         self.assertEqual(grade.outcome, "FAR")
 
     def test_failed_qc_grades_unresolved_without_hops(self) -> None:
-        grade, _ = grade_holdout(
+        grade, _, _, _ = grade_holdout(
             "((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);",
             {**CONCORDANT_SEQUENCES, "A": (None,) * 6},
             "A",
@@ -105,6 +125,7 @@ class PlacementAccuracyTests(unittest.TestCase):
 
         self.assertEqual(grade.outcome, "UNRESOLVED")
         self.assertIsNone(grade.edge_hops_from_truth)
+        self.assertIsNone(grade.patristic_distance_from_truth)
 
     def test_unresolved_status_is_not_graded_even_with_a_best_fit(self) -> None:
         """The regression guarding the status-before-best_fit ordering.
@@ -135,6 +156,7 @@ class PlacementAccuracyTests(unittest.TestCase):
 
         self.assertEqual(grade.outcome, "UNRESOLVED")
         self.assertIsNone(grade.edge_hops_from_truth)
+        self.assertIsNone(grade.patristic_distance_from_truth)
 
     def test_summaries_count_outcomes_and_hops(self) -> None:
         records = [
@@ -149,6 +171,28 @@ class PlacementAccuracyTests(unittest.TestCase):
             {"controls": 4, "outcome_correct": 2, "outcome_near": 1, "outcome_unresolved": 1},
         )
         self.assertEqual(hop_distribution(records), {"0": 2, "2": 1, "unresolved": 1})
+
+    def test_patristic_summary_reports_mean_median_and_max_over_graded_controls(self) -> None:
+        records = [
+            {"outcome": "CORRECT", "patristic_distance_from_truth": 0.0},
+            {"outcome": "NEAR", "patristic_distance_from_truth": 0.5},
+            {"outcome": "FAR", "patristic_distance_from_truth": 1.0},
+            {"outcome": "UNRESOLVED", "patristic_distance_from_truth": None},
+        ]
+
+        summary = summarize_patristic_distance(records)
+
+        self.assertEqual(summary["graded_controls"], 3)
+        self.assertAlmostEqual(summary["mean"], 0.5)
+        self.assertAlmostEqual(summary["median"], 0.5)
+        self.assertAlmostEqual(summary["max"], 1.0)
+
+    def test_patristic_summary_handles_no_graded_controls(self) -> None:
+        records = [{"outcome": "UNRESOLVED", "patristic_distance_from_truth": None}]
+
+        summary = summarize_patristic_distance(records)
+
+        self.assertEqual(summary, {"graded_controls": 0, "mean": None, "median": None, "max": None})
 
 
 class PlacementAccuracyCliTests(unittest.TestCase):
@@ -188,6 +232,7 @@ class PlacementAccuracyCliTests(unittest.TestCase):
             records = (output / "placement_accuracy_records.tsv").read_text(encoding="utf-8")
             self.assertIn("edge_hops_from_truth", records)
             self.assertIn("true_attachment_kind", records)
+            self.assertIn("patristic_distance_from_truth", records)
             summary = json.loads((output / "placement_accuracy_summary.json").read_text(encoding="utf-8"))
             self.assertEqual(summary["summary"]["controls"], 4)
             self.assertEqual(summary["summary"]["outcome_correct"], 4)
