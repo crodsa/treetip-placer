@@ -4,13 +4,20 @@ from __future__ import annotations
 
 import unittest
 
-from treetip_placer.models import PlacementResult, QueryQc
+from treetip_placer.models import PlacementResult, QcFinding, QueryQc
 from treetip_placer.cli import calibration_queries, panel_threshold_sweep, select_unique_sequence_controls
 from treetip_placer.models import AlignedSequence
 from treetip_placer.panel_selection import choose_reference_panel
 
 
-def result(sample_id: str, distance: float | None, *, qc_status: str = "PASS") -> PlacementResult:
+def result(
+    sample_id: str,
+    distance: float | None,
+    *,
+    qc_status: str = "PASS",
+    final_status: str = "PASS",
+    qc_findings: tuple[QcFinding, ...] = (),
+) -> PlacementResult:
     """Build the small result shape needed to test panel selection."""
 
     qc = QueryQc(
@@ -21,8 +28,9 @@ def result(sample_id: str, distance: float | None, *, qc_status: str = "PASS") -
         comparable_sites=100,
         nearest_reference="reference",
         nearest_distance=distance,
+        findings=list(qc_findings),
     )
-    return PlacementResult(sample_id=sample_id, qc=qc, final_status="PASS")
+    return PlacementResult(sample_id=sample_id, qc=qc, final_status=final_status)
 
 
 class PanelSelectionTests(unittest.TestCase):
@@ -78,6 +86,35 @@ class PanelSelectionTests(unittest.TestCase):
             [control.sample_id for control in calibration_queries("classical", controls)],
             ["classical::A", "classical::C"],
         )
+
+    def test_warn_decision_carries_the_selected_placement_s_own_findings(self) -> None:
+        # A "Decision: WARN" / "Selected placement: WARN" with an empty
+        # findings column is a black box: the reader can see something was
+        # flagged but not what. The chosen placement's own QC findings (which
+        # already carry a human-readable message, not just a code) must be
+        # copied onto the decision so the report can show the real reason.
+        warn_finding = QcFinding(
+            "DIFFUSE_DISTANCE_WEIGHT", "warning", "Best relative-fit weight is 0.013, below threshold."
+        )
+        decision = choose_reference_panel(
+            [result("query", 0.01, final_status="WARN", qc_findings=(warn_finding,))],
+            [result("query", 0.10)],
+            0.02,
+        )[0]
+
+        self.assertEqual(decision.decision_status, "WARN")
+        self.assertEqual(decision.selected_placement_status, "WARN")
+        self.assertIn("DIFFUSE_DISTANCE_WEIGHT", decision.findings)
+
+    def test_pass_decision_has_no_findings_to_report(self) -> None:
+        # Regression guard: a clean PASS must not gain spurious findings from
+        # this change -- there is nothing to explain.
+        decision = choose_reference_panel(
+            [result("query", 0.01, final_status="PASS")], [result("query", 0.10)], 0.02
+        )[0]
+
+        self.assertEqual(decision.decision_status, "PASS")
+        self.assertEqual(decision.findings, ())
 
     def test_threshold_sweep_includes_requested_default(self) -> None:
         rows = panel_threshold_sweep(

@@ -10,6 +10,7 @@ from treetip_placer.panel_selection import PanelDecision
 from treetip_placer.clade_assignment import CladeAssignment
 from treetip_placer.reports import (
     render_clade_context,
+    render_decision_row,
     render_tree_figure,
     render_tree_zoom,
     write_auto_report,
@@ -78,6 +79,61 @@ class ReportTests(unittest.TestCase):
         finally:
             if root.exists():
                 shutil.rmtree(root)
+
+    def test_decision_row_merges_panel_and_clade_findings(self) -> None:
+        # A reader looking at one row of the report table should see every
+        # reason a WARN was raised, not just whichever layer (panel decision
+        # vs. clade assignment) happened to have one -- the two findings
+        # sources must not silently overwrite or hide each other.
+        decision = PanelDecision(
+            sample_id="sample1",
+            assignment="CRYPTIC",
+            decision_status="WARN",
+            selected_panel="cryptic",
+            selected_placement_status="WARN",
+            classical_nearest_reference="classical",
+            classical_nearest_distance=0.1,
+            cryptic_nearest_reference="cryptic",
+            cryptic_nearest_distance=0.01,
+            distance_margin=0.09,
+            minimum_distance_separation=0.01,
+            findings=("DIFFUSE_DISTANCE_WEIGHT",),
+        )
+        clade_assignment = CladeAssignment(
+            sample_id="sample1",
+            selected_panel="cryptic",
+            phylogenetic_clade="C-II",
+            clade_assignment_status="WARN",
+            assignment_method="nearest_labelled_reference_edge_consensus_conflict",
+            nearest_reference="cryptic_reference",
+            supporting_reference_tips=("cryptic_reference",),
+            findings=("SELECTED_EDGE_CONSENSUS_DISAGREES_WITH_NEAREST_REFERENCE",),
+        )
+
+        row = render_decision_row(decision, clade_assignment)
+
+        self.assertIn("DIFFUSE_DISTANCE_WEIGHT", row)
+        self.assertIn("SELECTED_EDGE_CONSENSUS_DISAGREES_WITH_NEAREST_REFERENCE", row)
+
+    def test_decision_row_with_no_clade_assignment_still_shows_decision_findings(self) -> None:
+        decision = PanelDecision(
+            sample_id="sample1",
+            assignment="AMBIGUOUS",
+            decision_status="UNRESOLVED",
+            selected_panel=None,
+            selected_placement_status=None,
+            classical_nearest_reference="classical",
+            classical_nearest_distance=0.1,
+            cryptic_nearest_reference="cryptic",
+            cryptic_nearest_distance=0.095,
+            distance_margin=0.005,
+            minimum_distance_separation=0.01,
+            findings=("PANEL_DISTANCE_MARGIN_TOO_SMALL",),
+        )
+
+        row = render_decision_row(decision, None)
+
+        self.assertIn("PANEL_DISTANCE_MARGIN_TOO_SMALL", row)
 
     def test_dendrogram_highlights_only_selected_queries(self) -> None:
         figure = render_tree_figure(

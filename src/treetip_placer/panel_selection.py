@@ -123,6 +123,10 @@ def choose_reference_panel(
                 )
             )
             continue
+        # A WARN here means something about the chosen placement itself was
+        # flagged (diffuse fit weight, a long terminal branch, ...); carry its
+        # own QC finding codes onto the decision so the report can say why
+        # instead of showing an unexplained WARN.
         decisions.append(
             PanelDecision(
                 assignment=chosen_panel.upper(),
@@ -130,7 +134,7 @@ def choose_reference_panel(
                 selected_panel=chosen_panel,
                 selected_placement_status=chosen.final_status,
                 distance_margin=margin,
-                findings=(),
+                findings=tuple(finding.code for finding in chosen.qc.findings),
                 **common,
             )
         )
