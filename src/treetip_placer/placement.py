@@ -39,9 +39,7 @@ def place_query(
         )
 
     observed = distance_vector(query, references_in_tip_order)
-    candidates, scope = choose_candidate_edges(
-        observed, references_in_tip_order, tree, config
-    )
+    candidates, scope = choose_candidate_edges(observed, references_in_tip_order, tree, config)
     if not candidates:
         qc.findings.append(
             QcFinding(
@@ -185,9 +183,7 @@ def choose_candidate_edges(
     return tree.edges, "EXHAUSTIVE_FALLBACK"
 
 
-def score_edges(
-    tree: Tree, edges: Sequence[Edge], observed: Sequence[float | None]
-) -> list[EdgeFit]:
+def score_edges(tree: Tree, edges: Sequence[Edge], observed: Sequence[float | None]) -> list[EdgeFit]:
     """Fit every supplied edge and return fits ordered by the distance objective."""
 
     valid_indices = [index for index, distance in enumerate(observed) if distance is not None]
@@ -242,12 +238,8 @@ def fit_edge(
     if denominator <= 1e-12:
         return None
 
-    unconstrained_pendant = (
-        count * sum_y - signed_count * sum_signed_y
-    ) / denominator
-    unconstrained_distal = (
-        count * sum_signed_y - signed_count * sum_y
-    ) / denominator
+    unconstrained_pendant = (count * sum_y - signed_count * sum_signed_y) / denominator
+    unconstrained_distal = (count * sum_signed_y - signed_count * sum_y) / denominator
 
     candidates: list[tuple[float, float]] = []
     if unconstrained_pendant >= 0.0 and 0.0 <= unconstrained_distal <= edge.length:
@@ -325,10 +317,7 @@ def relative_fit_weights(fits: Sequence[EdgeFit]) -> list[EdgeFit]:
     scale = max(best.rmse * best.rmse, median(positive_objectives) if positive_objectives else 0.0, 1e-12)
     raw_weights = [math.exp(-0.5 * (fit.objective - best.objective) / scale) for fit in fits]
     total = sum(raw_weights)
-    return [
-        replace(fit, relative_fit_weight=weight / total)
-        for fit, weight in zip(fits, raw_weights, strict=True)
-    ]
+    return [replace(fit, relative_fit_weight=weight / total) for fit, weight in zip(fits, raw_weights, strict=True)]
 
 
 def bootstrap_edge_support(

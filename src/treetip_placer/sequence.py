@@ -70,15 +70,52 @@ def evaluate_sequence_qc(
             comparable_sites = compared
 
     if coverage < min_coverage:
-        findings.append(QcFinding("LOW_COVERAGE", "error", f"Only {observed_sites}/{total_sites} alignment sites are callable ({coverage:.1%}); the minimum is {min_coverage:.1%}."))
+        findings.append(
+            QcFinding(
+                "LOW_COVERAGE",
+                "error",
+                f"Only {observed_sites}/{total_sites} alignment sites are callable ({coverage:.1%}); the minimum is {min_coverage:.1%}.",
+            )
+        )
     elif coverage < warn_coverage:
-        findings.append(QcFinding("PARTIAL_COVERAGE", "warning", f"Only {observed_sites}/{total_sites} alignment sites are callable ({coverage:.1%})."))
+        findings.append(
+            QcFinding(
+                "PARTIAL_COVERAGE",
+                "warning",
+                f"Only {observed_sites}/{total_sites} alignment sites are callable ({coverage:.1%}).",
+            )
+        )
     if comparable_sites < min_comparable_sites:
-        findings.append(QcFinding("INSUFFICIENT_COMPARABLE_SITES", "error", f"The nearest reference shares {comparable_sites} callable sites; the minimum is {min_comparable_sites}."))
+        findings.append(
+            QcFinding(
+                "INSUFFICIENT_COMPARABLE_SITES",
+                "error",
+                f"The nearest reference shares {comparable_sites} callable sites; the minimum is {min_comparable_sites}.",
+            )
+        )
     if nearest_distance is None:
-        findings.append(QcFinding("NO_COMPARABLE_REFERENCE", "error", "No reference sequence shares a callable site with this query."))
+        findings.append(
+            QcFinding(
+                "NO_COMPARABLE_REFERENCE", "error", "No reference sequence shares a callable site with this query."
+            )
+        )
     elif nearest_distance > outlier_distance:
-        findings.append(QcFinding("DISTANT_FROM_REFERENCE_PANEL", "warning", f"Nearest reference '{nearest_reference}' has normalized distance {nearest_distance:.4f}, above the configured warning threshold {outlier_distance:.4f}."))
+        findings.append(
+            QcFinding(
+                "DISTANT_FROM_REFERENCE_PANEL",
+                "warning",
+                f"Nearest reference '{nearest_reference}' has normalized distance {nearest_distance:.4f}, above the configured warning threshold {outlier_distance:.4f}.",
+            )
+        )
 
     status = "FAIL" if any(finding.severity == "error" for finding in findings) else "WARN" if findings else "PASS"
-    return QueryQc(query.sample_id, status, coverage, observed_sites, comparable_sites, nearest_reference, nearest_distance, findings)
+    return QueryQc(
+        query.sample_id,
+        status,
+        coverage,
+        observed_sites,
+        comparable_sites,
+        nearest_reference,
+        nearest_distance,
+        findings,
+    )

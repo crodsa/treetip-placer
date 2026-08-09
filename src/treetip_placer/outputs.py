@@ -6,7 +6,7 @@ import csv
 import json
 from dataclasses import asdict
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Mapping, Sequence
 
 from .models import EdgeFit, PlacementResult, RunMetadata
 from .tree import Node, Tree, format_length, quote_label
@@ -32,9 +32,7 @@ def write_run_outputs(
     (trees / "placed_tree.nwk").write_text(placed_newick, encoding="utf-8")
     (trees / "reference_tree.normalized.nwk").write_text(tree.newick(), encoding="utf-8")
     (trees / "placed_tree.nexus").write_text(
-        "#NEXUS\n\nBEGIN TREES;\n"
-        f"  TREE placed_tree = {placed_newick.strip()}\n"
-        "END;\n",
+        f"#NEXUS\n\nBEGIN TREES;\n  TREE placed_tree = {placed_newick.strip()}\nEND;\n",
         encoding="utf-8",
     )
 
@@ -55,9 +53,7 @@ def render_placed_tree(tree: Tree, results: Sequence[PlacementResult]) -> str:
     attachments: dict[int, list[tuple[str, EdgeFit]]] = {}
     for result in results:
         if result.best_fit is not None and result.final_status != "FAIL":
-            attachments.setdefault(result.best_fit.child_id, []).append(
-                (result.sample_id, result.best_fit)
-            )
+            attachments.setdefault(result.best_fit.child_id, []).append((result.sample_id, result.best_fit))
 
     def render_node(node: Node) -> str:
         label = quote_label(node.name) if node.name else ""
@@ -80,11 +76,7 @@ def render_placed_tree(tree: Tree, results: Sequence[PlacementResult]) -> str:
                 f"{quote_label(sample_id)}:{format_length(fit.pendant_length)}"
                 for sample_id, fit in sorted(by_position[rounded_position])
             ]
-            subtree = (
-                "("
-                + ",".join([f"{subtree}:{format_length(downstream - position)}", *leaves])
-                + ")"
-            )
+            subtree = "(" + ",".join([f"{subtree}:{format_length(downstream - position)}", *leaves]) + ")"
             downstream = position
         return f"{subtree}:{format_length(downstream)}"
 
@@ -137,14 +129,10 @@ def write_placements_tsv(path: Path, results: Sequence[PlacementResult]) -> None
                     "pendant_length": value_or_empty(fit.pendant_length if fit else None),
                     "distance_objective": value_or_empty(fit.objective if fit else None),
                     "rmse": value_or_empty(fit.rmse if fit else None),
-                    "relative_fit_weight": value_or_empty(
-                        fit.relative_fit_weight if fit else None
-                    ),
+                    "relative_fit_weight": value_or_empty(fit.relative_fit_weight if fit else None),
                     "bootstrap_edge_support": value_or_empty(result.bootstrap_support),
                     "search_scope": result.search_scope or "",
-                    "findings": " | ".join(
-                        f"{finding.code}: {finding.message}" for finding in result.qc.findings
-                    ),
+                    "findings": " | ".join(f"{finding.code}: {finding.message}" for finding in result.qc.findings),
                 }
             )
 
@@ -256,9 +244,7 @@ def render_jplace_tree(tree: Tree) -> str:
         children = []
         for child in node.children:
             edge = tree.edge_by_child[child.node_id]
-            children.append(
-                f"{render_node(child)}:{format_length(edge.length)}{{{edge.edge_id}}}"
-            )
+            children.append(f"{render_node(child)}:{format_length(edge.length)}{{{edge.edge_id}}}")
         return "(" + ",".join(children) + ")" + label
 
     return render_node(tree.root) + ";"

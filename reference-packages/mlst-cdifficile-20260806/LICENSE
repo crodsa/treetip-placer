@@ -1,0 +1,13 @@
+This reference package is not licensed under the repository root Apache-2.0
+licence.
+
+It contains derived reference alignments, tree tip identifiers, and clade
+metadata whose source-by-source redistribution rights have not yet been
+documented for a public release. It remains available only in the private
+development repository with the repository owner's permission. No permission
+is granted to redistribute, publish, sublicense, or make this package publicly
+available until a maintainer records the applicable source permissions in a
+release decision.
+
+This restriction does not apply to the TreeTip Placer source code or to the
+synthetic fixtures under tests/fixtures/.

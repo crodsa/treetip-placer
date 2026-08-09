@@ -109,9 +109,7 @@ def render_provenance(summary: Mapping[str, object]) -> str:
     for key in PROVENANCE_KEYS:
         if key not in summary:
             continue
-        items.append(
-            f"<dt>{escape(key)}</dt><dd><code>{escape(format_scalar(summary[key]))}</code></dd>"
-        )
+        items.append(f"<dt>{escape(key)}</dt><dd><code>{escape(format_scalar(summary[key]))}</code></dd>")
     return "".join(items)
 
 
@@ -139,9 +137,7 @@ def render_outcome_bars(summary: Mapping[str, object]) -> str:
     )
 
 
-def render_threshold_sweep(
-    sweep: Sequence[Mapping[str, object]], summary: Mapping[str, object]
-) -> str:
+def render_threshold_sweep(sweep: Sequence[Mapping[str, object]], summary: Mapping[str, object]) -> str:
     """Render the accuracy-versus-coverage trade-off behind a packaged margin."""
 
     if not sweep:
@@ -174,9 +170,7 @@ def render_record_rows(
     for record in records:
         outcome = str(record.get(outcome_column, ""))
         css = ' class="problem"' if outcome in problem_outcomes else ""
-        cells = "".join(
-            f"<td>{escape(format_scalar(record.get(column)))}</td>" for column in record_columns
-        )
+        cells = "".join(f"<td>{escape(format_scalar(record.get(column)))}</td>" for column in record_columns)
         rows.append(f"<tr{css}>{cells}</tr>")
     return "".join(rows)
 

@@ -165,31 +165,21 @@ def portable_path(path: Path, manifest_directory: Path) -> str:
         return path.as_posix()
 
 
-def parse_panel_reference(
-    value: Any, base_directory: Path, panel_name: str
-) -> PanelReference:
+def parse_panel_reference(value: Any, base_directory: Path, panel_name: str) -> PanelReference:
     """Parse one panel object, resolving relative paths beside the manifest."""
 
     if not isinstance(value, dict):
         raise ValueError(f"{panel_name} must be an object")
     tree_path = resolve_package_path(value["tree"], base_directory, f"{panel_name}.tree")
-    alignment_path = resolve_package_path(
-        value["alignment"], base_directory, f"{panel_name}.alignment"
-    )
+    alignment_path = resolve_package_path(value["alignment"], base_directory, f"{panel_name}.alignment")
     tree_sha256 = optional_sha256(value.get("tree_sha256"), f"{panel_name}.tree_sha256")
-    alignment_sha256 = optional_sha256(
-        value.get("alignment_sha256"), f"{panel_name}.alignment_sha256"
-    )
+    alignment_sha256 = optional_sha256(value.get("alignment_sha256"), f"{panel_name}.alignment_sha256")
     tip_clades_value = value.get("tip_clades")
     if tip_clades_value is None:
         tip_clades_path = None
     else:
-        tip_clades_path = resolve_package_path(
-            tip_clades_value, base_directory, f"{panel_name}.tip_clades"
-        )
-    tip_clades_sha256 = optional_sha256(
-        value.get("tip_clades_sha256"), f"{panel_name}.tip_clades_sha256"
-    )
+        tip_clades_path = resolve_package_path(tip_clades_value, base_directory, f"{panel_name}.tip_clades")
+    tip_clades_sha256 = optional_sha256(value.get("tip_clades_sha256"), f"{panel_name}.tip_clades_sha256")
     if tip_clades_sha256 is not None and tip_clades_path is None:
         raise ValueError(f"{panel_name}.tip_clades_sha256 requires {panel_name}.tip_clades")
     expected_clade_count = value.get("expected_clade_count")
@@ -224,7 +214,11 @@ def optional_sha256(value: Any, field_name: str) -> str | None:
 
     if value is None:
         return None
-    if not isinstance(value, str) or len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
         raise ValueError(f"{field_name} must be a lowercase SHA-256 hex string")
     return value
 
@@ -297,9 +291,7 @@ def validate_tip_clade_metadata(path: Path, tree: Tree, panel_name: str) -> dict
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         if reader.fieldnames != ["reference_tip_id", "clade"]:
-            raise ValueError(
-                f"The {panel_name} tip-clade TSV must have exactly reference_tip_id and clade columns"
-            )
+            raise ValueError(f"The {panel_name} tip-clade TSV must have exactly reference_tip_id and clade columns")
         tip_ids: set[str] = set()
         clades: set[str] = set()
         for row in reader:

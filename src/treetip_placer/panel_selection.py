@@ -99,11 +99,7 @@ def choose_reference_panel(
 
         ordered = sorted(
             eligible,
-            key=lambda item: (
-                item[1].qc.nearest_distance
-                if item[1].qc.nearest_distance is not None
-                else float("inf")
-            ),
+            key=lambda item: item[1].qc.nearest_distance if item[1].qc.nearest_distance is not None else float("inf"),
         )
         chosen_panel, chosen = ordered[0]
         _, runner_up = ordered[1]
@@ -179,7 +175,9 @@ def write_panel_selection_outputs(
                 row[field] = "" if value is None else format(value, ".12g")
             writer.writerow(row)
     (root / "panel_assignment.json").write_text(
-        json.dumps({"metadata": dict(metadata), "decisions": [asdict(item) for item in decisions]}, indent=2, sort_keys=True)
+        json.dumps(
+            {"metadata": dict(metadata), "decisions": [asdict(item) for item in decisions]}, indent=2, sort_keys=True
+        )
         + "\n",
         encoding="utf-8",
     )

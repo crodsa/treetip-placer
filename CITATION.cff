@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use TreeTip Placer, please cite the software and the reference package provenance separately."
+type: software
+title: TreeTip Placer
+authors:
+  - name: TreeTip Placer contributors
+version: 0.7.0
+license: Apache-2.0
+repository-code: https://github.com/crodsa/treetip-placer
+url: https://github.com/crodsa/treetip-placer
+abstract: "Quality-controlled placement of fixed-column FASTA alignments on an immutable reference tree."

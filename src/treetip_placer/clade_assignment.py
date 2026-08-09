@@ -42,9 +42,7 @@ def load_tip_clades(path: str | Path | None, tree: Tree, panel_name: str) -> dic
         reader = csv.DictReader(handle, delimiter="\t")
         required = {"reference_tip_id", "clade"}
         if reader.fieldnames is None or not required.issubset(reader.fieldnames):
-            raise ValueError(
-                f"The {panel_name} tip-clade TSV must contain reference_tip_id and clade columns"
-            )
+            raise ValueError(f"The {panel_name} tip-clade TSV must contain reference_tip_id and clade columns")
         labels: dict[str, str] = {}
         for row_number, row in enumerate(reader, start=2):
             tip_id = (row["reference_tip_id"] or "").strip()
@@ -54,9 +52,7 @@ def load_tip_clades(path: str | Path | None, tree: Tree, panel_name: str) -> dic
                     f"The {panel_name} tip-clade TSV has an empty reference_tip_id or clade at row {row_number}"
                 )
             if tip_id not in tree.tip_index:
-                raise ValueError(
-                    f"The {panel_name} tip-clade TSV declares unknown reference tip '{tip_id}'"
-                )
+                raise ValueError(f"The {panel_name} tip-clade TSV declares unknown reference tip '{tip_id}'")
             previous = labels.get(tip_id)
             if previous is not None and previous != clade:
                 raise ValueError(
@@ -81,8 +77,7 @@ def assign_phylogenetic_clades(
     """
 
     result_by_panel = {
-        panel_name: {result.sample_id: result for result in results}
-        for panel_name, (_, results) in panels.items()
+        panel_name: {result.sample_id: result for result in results} for panel_name, (_, results) in panels.items()
     }
     assignments: list[CladeAssignment] = []
     for decision in decisions:
@@ -150,10 +145,7 @@ def assign_phylogenetic_clades(
             continue
 
         edge = tree.edge_by_child[result.best_fit.child_id]
-        subtree_tips = [
-            tree.tips[index].name or ""
-            for index in sorted(tree.edge_subtree_tip_indices(edge))
-        ]
+        subtree_tips = [tree.tips[index].name or "" for index in sorted(tree.edge_subtree_tip_indices(edge))]
         labelled_tips = tuple(tip_id for tip_id in subtree_tips if tip_id in labels)
         subtree_clades = {labels[tip_id] for tip_id in labelled_tips}
         if len(subtree_clades) == 1:
@@ -282,7 +274,11 @@ def write_clade_assignment_outputs(
             row["findings"] = " | ".join(assignment.findings)
             writer.writerow(row)
     (root / "clade_assignment.json").write_text(
-        json.dumps({"metadata": dict(metadata), "assignments": [asdict(item) for item in assignments]}, indent=2, sort_keys=True)
+        json.dumps(
+            {"metadata": dict(metadata), "assignments": [asdict(item) for item in assignments]},
+            indent=2,
+            sort_keys=True,
+        )
         + "\n",
         encoding="utf-8",
     )

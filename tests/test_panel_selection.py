@@ -35,27 +35,21 @@ def result(
 
 class PanelSelectionTests(unittest.TestCase):
     def test_selects_clearly_closer_panel(self) -> None:
-        decision = choose_reference_panel(
-            [result("query", 0.01)], [result("query", 0.10)], 0.02
-        )[0]
+        decision = choose_reference_panel([result("query", 0.01)], [result("query", 0.10)], 0.02)[0]
 
         self.assertEqual(decision.assignment, "CLASSICAL")
         self.assertEqual(decision.selected_panel, "classical")
         self.assertAlmostEqual(decision.distance_margin or 0.0, 0.09)
 
     def test_marks_small_distance_margin_ambiguous(self) -> None:
-        decision = choose_reference_panel(
-            [result("query", 0.01)], [result("query", 0.025)], 0.02
-        )[0]
+        decision = choose_reference_panel([result("query", 0.01)], [result("query", 0.025)], 0.02)[0]
 
         self.assertEqual(decision.assignment, "AMBIGUOUS")
         self.assertEqual(decision.decision_status, "UNRESOLVED")
         self.assertIsNone(decision.selected_panel)
 
     def test_zero_distance_is_not_treated_as_missing(self) -> None:
-        decision = choose_reference_panel(
-            [result("query", 0.045)], [result("query", 0.0)], 0.02
-        )[0]
+        decision = choose_reference_panel([result("query", 0.045)], [result("query", 0.0)], 0.02)[0]
 
         self.assertEqual(decision.assignment, "CRYPTIC")
         self.assertEqual(decision.selected_panel, "cryptic")
@@ -109,9 +103,9 @@ class PanelSelectionTests(unittest.TestCase):
     def test_pass_decision_has_no_findings_to_report(self) -> None:
         # Regression guard: a clean PASS must not gain spurious findings from
         # this change -- there is nothing to explain.
-        decision = choose_reference_panel(
-            [result("query", 0.01, final_status="PASS")], [result("query", 0.10)], 0.02
-        )[0]
+        decision = choose_reference_panel([result("query", 0.01, final_status="PASS")], [result("query", 0.10)], 0.02)[
+            0
+        ]
 
         self.assertEqual(decision.decision_status, "PASS")
         self.assertEqual(decision.findings, ())

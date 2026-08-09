@@ -80,9 +80,7 @@ def grade_placement_accuracy(
         outcome = "NEAR"
     else:
         outcome = "FAR"
-    return AccuracyGrade(
-        outcome=outcome, edge_hops_from_truth=hops, patristic_distance_from_truth=patristic_distance
-    )
+    return AccuracyGrade(outcome=outcome, edge_hops_from_truth=hops, patristic_distance_from_truth=patristic_distance)
 
 
 def build_accuracy_record(

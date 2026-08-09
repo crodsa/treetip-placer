@@ -44,14 +44,11 @@ def grade_holdout(newick: str, sequences: dict[str, object], held_out: str, near
 
     tree = Tree.from_newick(newick)
     by_id = {
-        name: AlignedSequence(name, tuple(text) if isinstance(text, str) else text)
-        for name, text in sequences.items()
+        name: AlignedSequence(name, tuple(text) if isinstance(text, str) else text) for name, text in sequences.items()
     }
     pruned, attachment = tree.without_tip(held_out)
     references = tuple(by_id[tip.name or ""] for tip in pruned.tips)
-    config = PlacementConfig(
-        preset="thorough", min_coverage=0.5, min_comparable_sites=2, unresolved_weight=0.0
-    )
+    config = PlacementConfig(preset="thorough", min_coverage=0.5, min_comparable_sites=2, unresolved_weight=0.0)
     result = place_query(by_id[held_out], references, pruned, config)
     grade = grade_placement_accuracy(result, pruned, attachment, near_hop_threshold)
     return grade, attachment, pruned, result
@@ -96,9 +93,7 @@ class PlacementAccuracyTests(unittest.TestCase):
         self.assertGreaterEqual(grade.patristic_distance_from_truth, 0.0)
 
     def test_displaced_placement_grades_near_within_the_threshold(self) -> None:
-        grade, _, _, _ = grade_holdout(
-            "((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);", DISCORDANT_SEQUENCES, "A", 2
-        )
+        grade, _, _, _ = grade_holdout("((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);", DISCORDANT_SEQUENCES, "A", 2)
 
         self.assertEqual(grade.edge_hops_from_truth, 2)
         self.assertEqual(grade.outcome, "NEAR")
@@ -108,9 +103,7 @@ class PlacementAccuracyTests(unittest.TestCase):
         self.assertGreater(grade.patristic_distance_from_truth, 0.05)
 
     def test_the_same_placement_grades_far_under_a_stricter_threshold(self) -> None:
-        grade, _, _, _ = grade_holdout(
-            "((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);", DISCORDANT_SEQUENCES, "A", 1
-        )
+        grade, _, _, _ = grade_holdout("((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);", DISCORDANT_SEQUENCES, "A", 1)
 
         self.assertEqual(grade.edge_hops_from_truth, 2)
         self.assertEqual(grade.outcome, "FAR")
@@ -212,19 +205,23 @@ class PlacementAccuracyCliTests(unittest.TestCase):
             alignment = root / "reference.fasta"
             output = root / "output"
             tree.write_text("((A:0.1,B:0.1):0.3,(C:0.1,D:0.1):0.3);\n", encoding="utf-8")
-            alignment.write_text(
-                ">A\nAAAAAA\n>B\nAAAAAT\n>C\nCCCCCC\n>D\nCCCCCG\n", encoding="utf-8"
-            )
+            alignment.write_text(">A\nAAAAAA\n>B\nAAAAAT\n>C\nCCCCCC\n>D\nCCCCCG\n", encoding="utf-8")
 
             exit_code = main(
                 [
                     "calibrate-placement-accuracy",
-                    "--tree", str(tree),
-                    "--reference-alignment", str(alignment),
-                    "--output", str(output),
-                    "--preset", "thorough",
-                    "--min-comparable-sites", "2",
-                    "--unresolved-weight", "0",
+                    "--tree",
+                    str(tree),
+                    "--reference-alignment",
+                    str(alignment),
+                    "--output",
+                    str(output),
+                    "--preset",
+                    "thorough",
+                    "--min-comparable-sites",
+                    "2",
+                    "--unresolved-weight",
+                    "0",
                 ]
             )
 

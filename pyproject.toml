@@ -8,15 +8,23 @@ version = "0.7.0"
 description = "Quality-controlled placement of fixed-column FASTA alignments on a reference tree."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "Proprietary: all rights reserved; research/development only"}
+license = {text = "Apache-2.0"}
 authors = [{name = "TreeTip Placer contributors"}]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: Other/Proprietary License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
 ]
+
+[project.urls]
+Homepage = "https://github.com/crodsa/treetip-placer"
+Source = "https://github.com/crodsa/treetip-placer"
+Issues = "https://github.com/crodsa/treetip-placer/issues"
+
+[project.optional-dependencies]
+dev = ["ruff==0.15.22"]
 
 [project.scripts]
 treetip = "treetip_placer.cli:main"
@@ -29,3 +37,10 @@ where = ["src"]
 
 [tool.unittest]
 start-directory = "tests"
+
+[tool.ruff]
+line-length = 119
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

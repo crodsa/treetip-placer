@@ -27,9 +27,7 @@ class ReportTests(unittest.TestCase):
         try:
             trees = root / "selected_trees"
             trees.mkdir()
-            (trees / "classical.selected_placed_tree.nwk").write_text(
-                "(classical_reference:0.1);\n", encoding="utf-8"
-            )
+            (trees / "classical.selected_placed_tree.nwk").write_text("(classical_reference:0.1);\n", encoding="utf-8")
             (trees / "cryptic.selected_placed_tree.nwk").write_text(
                 "(cryptic_reference:0.1,sample<unsafe>:0.1);\n", encoding="utf-8"
             )
@@ -70,9 +68,9 @@ class ReportTests(unittest.TestCase):
             self.assertIn("sample&lt;unsafe&gt;", contents)
             self.assertIn("panel_assignment.tsv", contents)
             self.assertIn("cryptic.selected_placed_tree.nwk", contents)
-            self.assertIn("full clade-context tree", contents)
+            self.assertIn("global clade context", contents)
             self.assertNotIn("Classical panel", contents)
-            self.assertIn("sample&lt;unsafe&gt; placement zoom", contents)
+            self.assertIn("sample&lt;unsafe&gt; placement branch", contents)
             self.assertEqual(contents.count('class="dendrogram"'), 2)
             self.assertIn("C-II", contents)
             self.assertIn("clade_assignment.tsv", contents)
@@ -154,9 +152,10 @@ class ReportTests(unittest.TestCase):
             "query",
         )
 
-        self.assertIn("placement zoom", figure)
+        self.assertIn("placement branch", figure)
         self.assertIn(">query</text>", figure)
         self.assertIn(">reference</text>", figure)
+        self.assertIn("placement-branch", figure)
 
     def test_clade_context_collapses_non_target_pure_subtrees(self) -> None:
         figure = render_clade_context(
@@ -170,8 +169,40 @@ class ReportTests(unittest.TestCase):
         self.assertIn("C-I (2 tips)", figure)
         self.assertIn("C-III (2 tips)", figure)
         self.assertIn(">query</text>", figure)
-        self.assertIn("target C-II expanded", figure)
-        self.assertIn("full clade-context tree", figure)
+        self.assertIn("clade C-II", figure)
+        self.assertIn("global clade context", figure)
+        self.assertNotIn(">A [", figure)
+        self.assertNotIn(">B [", figure)
+        self.assertNotIn(">C [", figure)
+        self.assertNotIn(">D [", figure)
+
+    def test_clade_context_persists_without_metadata_and_omits_reference_ids(self) -> None:
+        figure = render_clade_context(
+            "cryptic",
+            Tree.from_newick("((A:0.1,query:0.1):0.1,B:0.1);"),
+            "query",
+            None,
+            {},
+        )
+
+        self.assertIn("Unlabelled (1 tips)", figure)
+        self.assertIn(">query</text>", figure)
+        self.assertNotIn(">A</text>", figure)
+        self.assertNotIn(">B</text>", figure)
+
+    def test_placement_branch_collapses_excess_topological_neighbours(self) -> None:
+        figure = render_tree_zoom(
+            "cryptic",
+            Tree.from_newick(
+                "((sister:0.1,query:0.1):0.1,((far_1:0.1,far_2:0.1):0.1,(far_3:0.1,far_4:0.1):0.1):0.1);"
+            ),
+            "query",
+            max_reference_tips=2,
+        )
+
+        self.assertIn(">sister</text>", figure)
+        self.assertIn("… (", figure)
+        self.assertIn("placement-branch", figure)
 
     def test_report_allows_unresolved_clade_assignments(self) -> None:
         root = Path.cwd() / ".treetip-report-unresolved-clade-test"

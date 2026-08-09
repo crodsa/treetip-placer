@@ -99,9 +99,7 @@ class NewickParser:
             try:
                 node.length = float(number)
             except ValueError as error:
-                raise ValueError(
-                    f"Invalid branch length '{number}' at position {self.position}"
-                ) from error
+                raise ValueError(f"Invalid branch length '{number}' at position {self.position}") from error
         return node
 
     def _parse_label(self, optional: bool) -> str | None:
@@ -163,14 +161,10 @@ class Tree:
         self._validate_lengths()
         self.edges = [
             Edge(edge_id=index, parent_id=node.parent.node_id, child_id=node.node_id, length=node.length or 0.0)
-            for index, node in enumerate(
-                node for node in self.nodes.values() if node.parent is not None
-            )
+            for index, node in enumerate(node for node in self.nodes.values() if node.parent is not None)
         ]
         self.edge_by_child = {edge.child_id: edge for edge in self.edges}
-        self.edge_by_nodes = {
-            frozenset((edge.parent_id, edge.child_id)): edge for edge in self.edges
-        }
+        self.edge_by_nodes = {frozenset((edge.parent_id, edge.child_id)): edge for edge in self.edges}
         self.adjacency: dict[int, list[tuple[int, float]]] = {node_id: [] for node_id in self.nodes}
         for edge in self.edges:
             self.adjacency[edge.parent_id].append((edge.child_id, edge.length))
@@ -235,11 +229,7 @@ class Tree:
                 if neighbor_id not in visited:
                     visited[neighbor_id] = depth + 1
                     queue.append(neighbor_id)
-        return [
-            edge
-            for edge in self.edges
-            if edge.parent_id in visited and edge.child_id in visited
-        ]
+        return [edge for edge in self.edges if edge.parent_id in visited and edge.child_id in visited]
 
     def edge_subtree_tip_indices(self, edge: Edge) -> set[int]:
         """Return tip indexes on the child side of an oriented Newick edge."""
@@ -326,10 +316,7 @@ class Tree:
         if attachment.kind == "node":
             if attachment.node_id is None:
                 raise ValueError("Node attachment is missing a node ID")
-            return min(
-                self._node_distance(attachment.node_id, selected_node)
-                for selected_node in selected_nodes
-            )
+            return min(self._node_distance(attachment.node_id, selected_node) for selected_node in selected_nodes)
         if attachment.kind == "edge":
             if attachment.edge_parent_id is None or attachment.edge_child_id is None:
                 raise ValueError("Edge attachment is missing edge node IDs")
@@ -374,9 +361,7 @@ class Tree:
         ):
             return abs(distal_length - (attachment.distal_length or 0.0))
         placed_from_parent = distal_length + self._distance_to_attachment(edge.parent_id, attachment)
-        placed_from_child = (edge.length - distal_length) + self._distance_to_attachment(
-            edge.child_id, attachment
-        )
+        placed_from_child = (edge.length - distal_length) + self._distance_to_attachment(edge.child_id, attachment)
         return min(placed_from_parent, placed_from_child)
 
     def _distance_to_attachment(self, node_id: int, attachment: PrunedTipAttachment) -> float:
@@ -391,12 +376,8 @@ class Tree:
                 raise ValueError("Edge attachment is missing edge node IDs")
             if attachment.distal_length is None:
                 raise ValueError("Edge attachment is missing a distal length")
-            attachment_edge = self.edge_by_nodes[
-                frozenset((attachment.edge_parent_id, attachment.edge_child_id))
-            ]
-            via_parent = attachment.distal_length + self._weighted_node_distance(
-                node_id, attachment.edge_parent_id
-            )
+            attachment_edge = self.edge_by_nodes[frozenset((attachment.edge_parent_id, attachment.edge_child_id))]
+            via_parent = attachment.distal_length + self._weighted_node_distance(node_id, attachment.edge_parent_id)
             via_child = (attachment_edge.length - attachment.distal_length) + self._weighted_node_distance(
                 node_id, attachment.edge_child_id
             )
@@ -413,9 +394,7 @@ class Tree:
             if node.parent is None:
                 continue
             if node.length is None:
-                raise ValueError(
-                    f"Tree edge ending at node '{node.name or node.node_id}' has no branch length"
-                )
+                raise ValueError(f"Tree edge ending at node '{node.name or node.node_id}' has no branch length")
             if not math.isfinite(node.length) or node.length < 0:
                 raise ValueError(
                     f"Tree edge ending at node '{node.name or node.node_id}' has an invalid branch length"
@@ -485,7 +464,12 @@ class Tree:
         label = quote_label(node.name) if node.name else ""
         if node.is_leaf:
             return label
-        return "(" + ",".join(self._render_node(child) + ":" + format_length(child.length or 0.0) for child in node.children) + ")" + label
+        return (
+            "("
+            + ",".join(self._render_node(child) + ":" + format_length(child.length or 0.0) for child in node.children)
+            + ")"
+            + label
+        )
 
 
 def quote_label(label: str) -> str:

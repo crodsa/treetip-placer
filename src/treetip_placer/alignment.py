@@ -58,9 +58,7 @@ def read_fasta_records(path: str | Path) -> tuple[tuple[str, str], ...]:
                 chunks = []
             else:
                 if current_name is None:
-                    raise ValueError(
-                        f"Sequence content appears before a FASTA header at {fasta_path}:{line_number}"
-                    )
+                    raise ValueError(f"Sequence content appears before a FASTA header at {fasta_path}:{line_number}")
                 chunks.append(line)
     finish_record()
     if not records:
@@ -84,26 +82,19 @@ def read_fasta_alignment(path: str | Path) -> AlignmentTable:
     records = read_fasta_records(alignment_path)
     lengths = {len(sequence) for _, sequence in records}
     if len(lengths) != 1:
-        raise ValueError(
-            f"FASTA input is not a fixed-column alignment; observed lengths: {sorted(lengths)}"
-        )
+        raise ValueError(f"FASTA input is not a fixed-column alignment; observed lengths: {sorted(lengths)}")
     site_count = lengths.pop()
     sequences = tuple(
         AlignedSequence(
             sample_id=name,
-            characters=tuple(
-                None if character in SEQUENCE_MISSING else character
-                for character in sequence
-            ),
+            characters=tuple(None if character in SEQUENCE_MISSING else character for character in sequence),
         )
         for name, sequence in records
     )
     return AlignmentTable(sequences=sequences, site_count=site_count)
 
 
-def require_matching_alignment_widths(
-    reference: AlignmentTable, queries: AlignmentTable
-) -> None:
+def require_matching_alignment_widths(reference: AlignmentTable, queries: AlignmentTable) -> None:
     """Reject unaligned queries rather than silently re-aligning them."""
 
     if reference.site_count != queries.site_count:

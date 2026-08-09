@@ -83,9 +83,7 @@ class CliTests(unittest.TestCase):
             clades = root / "tip_clades.tsv"
             output = root / "output"
             tree.write_text("((A:0.1,B:0.1):0.1,(C:0.1,D:0.1):0.1);\n", encoding="utf-8")
-            alignment.write_text(
-                ">A\nAAAAAA\n>B\nAAAAAT\n>C\nCCCCCC\n>D\nCCCCCG\n", encoding="utf-8"
-            )
+            alignment.write_text(">A\nAAAAAA\n>B\nAAAAAT\n>C\nCCCCCC\n>D\nCCCCCG\n", encoding="utf-8")
             clades.write_text(
                 "reference_tip_id\tclade\nA\tC-I\nB\tC-I\nC\tC-II\nD\tC-II\n",
                 encoding="utf-8",
@@ -93,13 +91,20 @@ class CliTests(unittest.TestCase):
             exit_code = main(
                 [
                     "calibrate-clade-assignment",
-                    "--tree", str(tree),
-                    "--reference-alignment", str(alignment),
-                    "--tip-clades", str(clades),
-                    "--output", str(output),
-                    "--preset", "thorough",
-                    "--min-comparable-sites", "2",
-                    "--unresolved-weight", "0",
+                    "--tree",
+                    str(tree),
+                    "--reference-alignment",
+                    str(alignment),
+                    "--tip-clades",
+                    str(clades),
+                    "--output",
+                    str(output),
+                    "--preset",
+                    "thorough",
+                    "--min-comparable-sites",
+                    "2",
+                    "--unresolved-weight",
+                    "0",
                 ]
             )
             self.assertEqual(exit_code, 0)

@@ -192,9 +192,7 @@ class ReferencePackageTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "every reference tip"):
                 load_paired_reference_package(manifest_path)
 
-            tip_clades.write_text(
-                "reference_tip_id\tclade\nA\t1\nB\t1\nC\t1\n", encoding="utf-8"
-            )
+            tip_clades.write_text("reference_tip_id\tclade\nA\t1\nB\t1\nC\t1\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "expected 2 clades"):
                 load_paired_reference_package(manifest_path)
         finally:

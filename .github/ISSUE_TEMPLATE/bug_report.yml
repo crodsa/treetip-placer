@@ -1,0 +1,28 @@
+name: Bug report
+description: Report a reproducible software defect using synthetic or authorised data only.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include genomes, clinical metadata, restricted database exports, credentials, or sensitive sample identifiers."
+  - type: input
+    id: version
+    attributes:
+      label: TreeTip Placer version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal synthetic reproduction
+      description: Include command, inputs, expected result, and observed result.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, operating system, installation method, and relevant tool versions.
+    validations:
+      required: true

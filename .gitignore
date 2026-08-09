@@ -9,6 +9,7 @@ build/
 dist/
 output/
 results/
+.ci-smoke/
 *.log
 .tools/
 .DS_Store

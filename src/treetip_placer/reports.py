@@ -37,14 +37,10 @@ def write_auto_report(
     for decision in decisions:
         assignments[decision.assignment] = assignments.get(decision.assignment, 0) + 1
     summary_items = "".join(
-        f"<li><strong>{escape(label)}</strong>: {count}</li>"
-        for label, count in sorted(assignments.items())
+        f"<li><strong>{escape(label)}</strong>: {count}</li>" for label, count in sorted(assignments.items())
     )
     clade_by_sample = {assignment.sample_id: assignment for assignment in clade_assignments}
-    rows = "\n".join(
-        render_decision_row(decision, clade_by_sample.get(decision.sample_id))
-        for decision in decisions
-    )
+    rows = "\n".join(render_decision_row(decision, clade_by_sample.get(decision.sample_id)) for decision in decisions)
     package = metadata.get("reference_package_path") or "Explicit command-line reference paths"
     threshold = format(float(metadata["minimum_distance_separation"]), ".12g")
     document = f"""<!doctype html>
@@ -73,7 +69,7 @@ def write_auto_report(
   <p>Minimum distance separation: <strong>{escape(threshold)}</strong></p>
   <p>Reference package: <code>{escape(str(package))}</code></p>
   <h2>Selected-tree dendrograms</h2>
-  <p>Only panels assigned to at least one query are shown. Each assigned query has a complete labelled tree, a local placement zoom, and a clade-context overview. These diagrams visualize immutable selected trees. Orange labels mark newly placed queries; clade-context branches are display-only collapses and never modify the underlying tree.</p>
+  <p>Only panels assigned to at least one query are shown. Each assigned query has exactly two display-only diagrams of its immutable selected tree: a global clade context without reference-tip names and a topology-derived local placement branch with named neighbouring references. Orange marks newly placed queries; the blue branch in the local view is the query attachment branch. Neither diagram changes the fixed tree or clade call.</p>
   {render_selected_tree_figures(root, decisions, clade_by_sample, tip_clades)}
   <h2>Queries</h2>
   <table>
@@ -123,7 +119,7 @@ def render_decision_row(
         " | ".join(all_findings),
     )
     cells = "".join(f"<td>{escape(value)}</td>" for value in values)
-    return f"<tr class=\"{escape(decision.assignment)}\">{cells}</tr>"
+    return f'<tr class="{escape(decision.assignment)}">{cells}</tr>'
 
 
 def render_selected_tree_figures(
@@ -132,16 +128,11 @@ def render_selected_tree_figures(
     clade_by_sample: Mapping[str, CladeAssignment],
     tip_clades: Mapping[str, Mapping[str, str]],
 ) -> str:
-    """Render each selected fixed-backbone tree and a placement zoom per query."""
+    """Render global clade context and local placement branch per selected query."""
 
     panels = ("classical", "cryptic")
     highlighted = {
-        panel: {
-            decision.sample_id
-            for decision in decisions
-            if decision.selected_panel == panel
-        }
-        for panel in panels
+        panel: {decision.sample_id for decision in decisions if decision.selected_panel == panel} for panel in panels
     }
     figures = []
     for panel in panels:
@@ -163,7 +154,7 @@ def render_selected_tree_figures(
                     tip_clades.get(panel, {}),
                 )
             )
-            figures.append(render_tree_zoom(panel, tree, sample_id))
+            figures.append(render_tree_zoom(panel, tree, sample_id, assignment))
     return "\n".join(figures)
 
 
@@ -227,9 +218,7 @@ def render_tree_figure(
         y = y_positions[tip.node_id]
         if tip.name in highlighted_tips:
             labels.append(f'<circle cx="{x:.3f}" cy="{y:.3f}" r="3" class="query-tip"/>')
-            labels.append(
-                f'<text x="{x + 6:.3f}" y="{y + 3:.3f}" class="query-label">{escape(tip.name or "")}</text>'
-            )
+            labels.append(f'<text x="{x + 6:.3f}" y="{y + 3:.3f}" class="query-label">{escape(tip.name or "")}</text>')
         elif show_tip_names:
             labels.append(
                 f'<text x="{x + 4:.3f}" y="{y + 2.8:.3f}" class="reference-label">{escape(tip.name or "")}</text>'
@@ -238,34 +227,42 @@ def render_tree_figure(
   <figcaption><strong>{escape(panel.title())} selected tree</strong> ({len(tree.tips)} tips; all tip names shown)</figcaption>
   <svg class="dendrogram" viewBox="0 0 {width} {height}" role="img" aria-label="{escape(panel)} selected-tree dendrogram">
     <style>.branch {{ stroke: #64748b; stroke-width: 0.8; fill: none; }} .query-tip {{ fill: #ea580c; }} .query-label {{ fill: #9a3412; font: 12px system-ui, sans-serif; font-weight: 700; }} .reference-label {{ fill: #334155; font: 8px system-ui, sans-serif; }}</style>
-    {''.join(lines)}
-    {''.join(labels)}
+    {"".join(lines)}
+    {"".join(labels)}
   </svg>
 </figure>"""
 
 
-def render_tree_zoom(panel: str, tree: Tree, sample_id: str) -> str:
-    """Render a cropped neighborhood around one newly placed tip.
+def render_tree_zoom(
+    panel: str,
+    tree: Tree,
+    sample_id: str,
+    clade_assignment: CladeAssignment | None = None,
+    *,
+    max_reference_tips: int = 12,
+) -> str:
+    """Render a topology-derived local subtree around one newly placed tip.
 
-    The SVG retains the original tree coordinates, so it is a genuine zoom of the
-    selected placement tree rather than an independently rearranged schematic.
+    This deliberately avoids an SVG-coordinate crop: display neighbours are
+    selected by graph-hop proximity to the placement branch and all excluded
+    reference-only subtrees remain explicit collapsed leaves.  It is therefore
+    a faithful local view of the immutable selected tree, not a re-layout or
+    local reconstruction.
     """
 
     focus_tip = next((tip for tip in tree.tips if tip.name == sample_id), None)
     if focus_tip is None:
         return (
-            f"<p><strong>{escape(sample_id)}</strong>: placement zoom is unavailable "
+            f"<p><strong>{escape(sample_id)}</strong>: placement branch is unavailable "
             "because the selected tree does not contain the query tip.</p>"
         )
 
-    width = 1100
-    left = 28
-    right = 330
-    top = 28
-    row_height = max(3.0, min(9.0, 780.0 / max(len(tree.tips), 1)))
-    height = int(top * 2 + max(len(tree.tips) - 1, 1) * row_height + 24)
+    if focus_tip.parent is None:
+        return f"<p><strong>{escape(sample_id)}</strong>: placement branch is unavailable because the query is a tree root.</p>"
+    if max_reference_tips < 2:
+        raise ValueError("max_reference_tips must be at least 2")
+
     distances: dict[int, float] = {}
-    y_positions: dict[int, float] = {}
 
     def assign(node: Node, distance: float) -> None:
         distances[node.node_id] = distance
@@ -273,62 +270,142 @@ def render_tree_zoom(panel: str, tree: Tree, sample_id: str) -> str:
             assign(child, distance + (child.length or 0.0))
 
     assign(tree.root, 0.0)
-    maximum_distance = max(distances[tip.node_id] for tip in tree.tips) or 1.0
-    for index, tip in enumerate(tree.tips):
-        y_positions[tip.node_id] = top + index * row_height
 
-    def assign_internal_y(node: Node) -> float:
+    def descendant_reference_names(node: Node) -> tuple[str, ...]:
         if node.is_leaf:
-            return y_positions[node.node_id]
-        children_y = [assign_internal_y(child) for child in node.children]
-        y_positions[node.node_id] = sum(children_y) / len(children_y)
-        return y_positions[node.node_id]
+            return () if node.name == sample_id else (node.name or "",)
+        return tuple(name for child in node.children for name in descendant_reference_names(child))
 
-    assign_internal_y(tree.root)
+    def contains_query(node: Node) -> bool:
+        return node.name == sample_id if node.is_leaf else any(contains_query(child) for child in node.children)
 
-    def x_position(node: Node) -> float:
-        return left + distances[node.node_id] / maximum_distance * (width - left - right)
+    ancestors: list[Node] = []
+    current = focus_tip.parent
+    while current is not None:
+        ancestors.append(current)
+        current = current.parent
+    display_root = next(
+        (node for node in ancestors if 2 <= len(descendant_reference_names(node)) <= max_reference_tips),
+        next(
+            (node for node in ancestors if len(descendant_reference_names(node)) >= 2),
+            ancestors[-1],
+        ),
+    )
+
+    allowed_node_ids: set[int] = set()
+
+    def collect_node_ids(node: Node) -> None:
+        allowed_node_ids.add(node.node_id)
+        for child in node.children:
+            collect_node_ids(child)
+
+    collect_node_ids(display_root)
+
+    # Graph-hop ordering is topology-based and deterministic because the tree's
+    # node identifiers preserve Newick traversal order for tied tips. Restrict
+    # the walk to the chosen display subtree so an external cousin cannot use up
+    # the local-label budget.
+    visible_reference_names: set[str] = set()
+    queue: list[tuple[int, int]] = [(focus_tip.parent.node_id, 0)]
+    seen = {focus_tip.parent.node_id}
+    cursor = 0
+    while cursor < len(queue) and len(visible_reference_names) < max_reference_tips:
+        node_id, hops = queue[cursor]
+        cursor += 1
+        node = tree.nodes[node_id]
+        if node.is_leaf and node.name != sample_id:
+            visible_reference_names.add(node.name or "")
+            continue
+        for neighbour_id, _ in sorted(tree.adjacency[node_id]):
+            if neighbour_id in allowed_node_ids and neighbour_id not in seen:
+                seen.add(neighbour_id)
+                queue.append((neighbour_id, hops + 1))
+
+    def build(node: Node) -> ContextNode:
+        references = descendant_reference_names(node)
+        has_query = contains_query(node)
+        if not has_query and not any(name in visible_reference_names for name in references):
+            return ContextNode(source=node, label=f"… ({len(references)} tips)", collapsed=True)
+        if node.is_leaf:
+            if node.name == sample_id:
+                return ContextNode(source=node, label=node.name, is_query=True)
+            return ContextNode(source=node, label=node.name)
+        return ContextNode(source=node, children=[build(child) for child in node.children])
+
+    local_root = build(display_root)
+    leaves: list[ContextNode] = []
+
+    def collect_leaves(node: ContextNode) -> None:
+        if not node.children:
+            leaves.append(node)
+            return
+        for child in node.children:
+            collect_leaves(child)
+
+    collect_leaves(local_root)
+    width = 1100
+    left = 28
+    right = 330
+    top = 28
+    row_height = max(18.0, min(28.0, 620.0 / max(len(leaves), 1)))
+    height = int(top * 2 + max(len(leaves) - 1, 1) * row_height + 28)
+    y_positions = {id(leaf): top + index * row_height for index, leaf in enumerate(leaves)}
+
+    def assign_y(node: ContextNode) -> float:
+        if not node.children:
+            return y_positions[id(node)]
+        values = [assign_y(child) for child in node.children]
+        y_positions[id(node)] = sum(values) / len(values)
+        return y_positions[id(node)]
+
+    assign_y(local_root)
+    root_distance = distances[display_root.node_id]
+    visible_distances = [distances[leaf.source.node_id] for leaf in leaves]
+    distance_span = max(visible_distances, default=root_distance) - root_distance or 1.0
+
+    def x_position(node: ContextNode) -> float:
+        return left + (distances[node.source.node_id] - root_distance) / distance_span * (width - left - right)
 
     lines: list[str] = []
-    for node in tree.nodes.values():
-        if not node.children:
-            continue
-        child_y = [y_positions[child.node_id] for child in node.children]
-        lines.append(
-            f'<line x1="{x_position(node):.3f}" y1="{min(child_y):.3f}" '
-            f'x2="{x_position(node):.3f}" y2="{max(child_y):.3f}" class="branch"/>'
-        )
-        for child in node.children:
-            lines.append(
-                f'<line x1="{x_position(node):.3f}" y1="{y_positions[child.node_id]:.3f}" '
-                f'x2="{x_position(child):.3f}" y2="{y_positions[child.node_id]:.3f}" class="branch"/>'
-            )
-
-    focus_x = x_position(focus_tip)
-    focus_y = y_positions[focus_tip.node_id]
-    crop_width = min(width, 750)
-    crop_left = max(0.0, min(focus_x - crop_width + 260, width - crop_width))
-    crop_height = min(float(height), 180.0)
-    crop_top = max(0.0, min(focus_y - crop_height / 2, height - crop_height))
     labels: list[str] = []
-    for tip in tree.tips:
-        if tip.name == sample_id:
-            continue
-        y = y_positions[tip.node_id]
-        if crop_top <= y <= crop_top + crop_height:
-            x = x_position(tip)
-            labels.append(
-                f'<text x="{x + 4:.3f}" y="{y + 2.8:.3f}" class="reference-label">{escape(tip.name or "")}</text>'
+
+    def render(node: ContextNode) -> None:
+        x = x_position(node)
+        if node.children:
+            child_y = [y_positions[id(child)] for child in node.children]
+            lines.append(
+                f'<line x1="{x:.3f}" y1="{min(child_y):.3f}" x2="{x:.3f}" y2="{max(child_y):.3f}" class="branch"/>'
             )
+            for child in node.children:
+                child_x = x_position(child)
+                branch_class = "placement-branch" if child.is_query else "branch"
+                lines.append(
+                    f'<line x1="{x:.3f}" y1="{y_positions[id(child)]:.3f}" '
+                    f'x2="{child_x:.3f}" y2="{y_positions[id(child)]:.3f}" class="{branch_class}"/>'
+                )
+                render(child)
+            return
+        y = y_positions[id(node)]
+        label = escape(node.label or "")
+        if node.is_query:
+            labels.append(f'<circle cx="{x:.3f}" cy="{y:.3f}" r="4" class="query-tip"/>')
+            labels.append(f'<text x="{x + 7:.3f}" y="{y + 4:.3f}" class="query-label">{label}</text>')
+        elif node.collapsed:
+            labels.append(f'<circle cx="{x:.3f}" cy="{y:.3f}" r="3" class="collapsed-tip"/>')
+            labels.append(f'<text x="{x + 6:.3f}" y="{y + 3.5:.3f}" class="collapsed-label">{label}</text>')
+        else:
+            labels.append(f'<text x="{x + 4:.3f}" y="{y + 3:.3f}" class="reference-label">{label}</text>')
+
+    render(local_root)
     label = escape(sample_id)
+    clade = escape(clade_assignment.phylogenetic_clade or "unresolved") if clade_assignment else "unavailable"
+    status = escape(clade_assignment.clade_assignment_status) if clade_assignment else "unavailable"
     return f"""<figure>
-  <figcaption><strong>{label} placement zoom</strong> ({escape(panel.title())} panel)</figcaption>
-  <svg class="dendrogram" viewBox="{crop_left:.3f} {crop_top:.3f} {crop_width:.3f} {crop_height:.3f}" role="img" aria-label="{label} placement zoom">
-    <style>.branch {{ stroke: #64748b; stroke-width: 0.8; fill: none; }} .query-tip {{ fill: #ea580c; }} .query-label {{ fill: #9a3412; font: 12px system-ui, sans-serif; font-weight: 700; }} .reference-label {{ fill: #334155; font: 10px system-ui, sans-serif; }}</style>
-    {''.join(lines)}
-    {''.join(labels)}
-    <circle cx="{focus_x:.3f}" cy="{focus_y:.3f}" r="4" class="query-tip"/>
-    <text x="{focus_x + 7:.3f}" y="{focus_y + 4:.3f}" class="query-label">{label}</text>
+  <figcaption><strong>{label} placement branch</strong> ({escape(panel.title())} panel; clade {clade}; status {status}; up to {max_reference_tips} named reference tips)</figcaption>
+  <svg class="dendrogram" viewBox="0 0 {width} {height}" role="img" aria-label="{label} topology-derived placement branch">
+    <style>.branch {{ stroke: #64748b; stroke-width: 0.9; fill: none; }} .placement-branch {{ stroke: #2563eb; stroke-width: 2.8; fill: none; }} .query-tip {{ fill: #ea580c; }} .query-label {{ fill: #9a3412; font: 13px system-ui, sans-serif; font-weight: 700; }} .reference-label {{ fill: #334155; font: 11px system-ui, sans-serif; }} .collapsed-tip {{ fill: #64748b; }} .collapsed-label {{ fill: #475569; font: 11px system-ui, sans-serif; }}</style>
+    {"".join(lines)}
+    {"".join(labels)}
   </svg>
 </figure>"""
 
@@ -340,21 +417,16 @@ def render_clade_context(
     target_clade: str | None,
     tip_clades: Mapping[str, str],
 ) -> str:
-    """Render a topology-preserving overview with non-target clades collapsed.
+    """Render the full known reference universe without reference-tip names.
 
-    A collapse is used only for a subtree containing no query and exactly one
-    annotated clade. The display preserves branch paths to the collapse point;
-    it never changes the immutable placement tree or derives a new clade call.
+    Every reference-only subtree becomes a single clade, mixed, or unlabelled
+    display leaf.  This gives the query global context while keeping all
+    reference identifiers out of the zoom-out figure.
     """
 
-    if target_clade is None or not tip_clades:
-        return (
-            f"<p><strong>{escape(sample_id)}</strong>: clade-context overview is unavailable "
-            "because the selected panel has no resolved clade assignment and metadata.</p>"
-        )
     if sample_id not in tree.tip_index:
         return (
-            f"<p><strong>{escape(sample_id)}</strong>: clade-context overview is unavailable "
+            f"<p><strong>{escape(sample_id)}</strong>: global clade context is unavailable "
             "because the selected tree does not contain the query tip.</p>"
         )
 
@@ -368,26 +440,21 @@ def render_clade_context(
         contains_query = sample_id in names
         reference_names = tuple(name for name in names if name != sample_id)
         clades = {tip_clades[name] for name in reference_names if name in tip_clades}
-        if not contains_query and len(clades) == 1:
-            clade = next(iter(clades))
-            if clade != target_clade:
-                return ContextNode(
-                    source=node,
-                    label=f"{clade} ({len(reference_names)} tips)",
-                    collapsed=True,
-                )
-        if not contains_query and not clades and len(reference_names) > 1:
-            return ContextNode(
-                source=node,
-                label=f"Unlabelled ({len(reference_names)} tips)",
-                collapsed=True,
-            )
+        if not contains_query:
+            if not clades:
+                label = f"Unlabelled ({len(reference_names)} tips)"
+            elif len(clades) == 1 and len(clades) == len({tip_clades.get(name) for name in reference_names}):
+                label = f"{next(iter(clades))} ({len(reference_names)} tips)"
+            elif len(clades) == 1:
+                label = f"{next(iter(clades))} + unlabelled ({len(reference_names)} tips)"
+            else:
+                label = f"Mixed ({len(reference_names)} tips)"
+            return ContextNode(source=node, label=label, collapsed=True)
         if node.is_leaf:
             name = node.name or ""
             if name == sample_id:
                 return ContextNode(source=node, label=name, is_query=True)
-            clade = tip_clades.get(name, "Unlabelled")
-            return ContextNode(source=node, label=f"{name} [{clade}]")
+            return ContextNode(source=node, label="Unlabelled (1 tips)", collapsed=True)
         return ContextNode(source=node, children=[build(child) for child in node.children])
 
     display_root = build(tree.root)
@@ -439,8 +506,7 @@ def render_clade_context(
         if node.children:
             child_y = [y_positions[id(child)] for child in node.children]
             lines.append(
-                f'<line x1="{x:.3f}" y1="{min(child_y):.3f}" x2="{x:.3f}" '
-                f'y2="{max(child_y):.3f}" class="branch"/>'
+                f'<line x1="{x:.3f}" y1="{min(child_y):.3f}" x2="{x:.3f}" y2="{max(child_y):.3f}" class="branch"/>'
             )
             for child in node.children:
                 child_x = x_position(child)
@@ -462,13 +528,13 @@ def render_clade_context(
 
     render(display_root)
     label = escape(sample_id)
-    clade = escape(target_clade)
+    clade = escape(target_clade or "unresolved")
     return f"""<figure>
-  <figcaption><strong>{label} full clade-context tree</strong> (target {clade} expanded; other pure clade subtrees collapsed and labelled)</figcaption>
-  <svg class="dendrogram" viewBox="0 0 {width} {height}" role="img" aria-label="{label} full clade-context tree">
+  <figcaption><strong>{label} global clade context</strong> (clade {clade}; all reference-only subtrees collapsed; reference-tip names omitted)</figcaption>
+  <svg class="dendrogram" viewBox="0 0 {width} {height}" role="img" aria-label="{label} global clade context">
     <style>.branch {{ stroke: #64748b; stroke-width: 0.9; fill: none; }} .query-tip {{ fill: #ea580c; }} .query-label {{ fill: #9a3412; font: 13px system-ui, sans-serif; font-weight: 700; }} .collapsed-tip {{ fill: #2563eb; }} .collapsed-label {{ fill: #1e3a8a; font: 12px system-ui, sans-serif; font-weight: 650; }} .context-tip-label {{ fill: #334155; font: 11px system-ui, sans-serif; }}</style>
-    {''.join(lines)}
-    {''.join(labels)}
+    {"".join(lines)}
+    {"".join(labels)}
   </svg>
 </figure>"""
 

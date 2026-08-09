@@ -75,9 +75,7 @@ ORGANISM_REFERENCE_PACKAGES: dict[str, str] = {
 def resolve_organism_reference_package(organism: str) -> Path:
     """Resolve a `classify --organism` key to its bundled manifest path."""
 
-    manifest_path = (
-        _REPO_ROOT / "reference-packages" / ORGANISM_REFERENCE_PACKAGES[organism] / "paired_reference.json"
-    )
+    manifest_path = _REPO_ROOT / "reference-packages" / ORGANISM_REFERENCE_PACKAGES[organism] / "paired_reference.json"
     if not manifest_path.is_file():
         raise ValueError(
             f"Bundled reference package for organism '{organism}' is missing: "
@@ -86,9 +84,7 @@ def resolve_organism_reference_package(organism: str) -> Path:
     return manifest_path
 
 
-def resolve_mafft_executable(
-    explicit: str | None, *, path_lookup: Callable[[str], str | None] = shutil.which
-) -> str:
+def resolve_mafft_executable(explicit: str | None, *, path_lookup: Callable[[str], str | None] = shutil.which) -> str:
     """Return the MAFFT executable to use, auto-detecting it on PATH if not given."""
 
     if explicit:
@@ -177,13 +173,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=__version__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    place = subparsers.add_parser(
-        "place", help="Place aligned query sequences on a fixed reference tree."
-    )
+    place = subparsers.add_parser("place", help="Place aligned query sequences on a fixed reference tree.")
     place.add_argument("--tree", required=True, help="Reference branch-length Newick tree.")
-    place.add_argument(
-        "--reference-alignment", required=True, help="Reference fixed-column FASTA alignment."
-    )
+    place.add_argument("--reference-alignment", required=True, help="Reference fixed-column FASTA alignment.")
     place.add_argument("--query-alignment", required=True, help="Query fixed-column FASTA alignment.")
     place.add_argument("--output", required=True, help="New, empty output directory.")
     add_placement_controls(place)
@@ -285,9 +277,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Measure whether leave-one-out placement recovers a held-out reference tip's position.",
     )
     accuracy.add_argument("--tree", required=True, help="Reference branch-length Newick tree.")
-    accuracy.add_argument(
-        "--reference-alignment", required=True, help="Reference fixed-column FASTA alignment."
-    )
+    accuracy.add_argument("--reference-alignment", required=True, help="Reference fixed-column FASTA alignment.")
     accuracy.add_argument(
         "--max-controls",
         type=positive_integer,
@@ -331,9 +321,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Create a checksummed portable paired classical/cryptic reference manifest.",
     )
     package.add_argument("--classical-tree", required=True, help="Classical reference branch-length Newick tree.")
-    package.add_argument("--classical-reference-alignment", required=True, help="Classical reference fixed-column FASTA alignment.")
+    package.add_argument(
+        "--classical-reference-alignment", required=True, help="Classical reference fixed-column FASTA alignment."
+    )
     package.add_argument("--cryptic-tree", required=True, help="Cryptic reference branch-length Newick tree.")
-    package.add_argument("--cryptic-reference-alignment", required=True, help="Cryptic reference fixed-column FASTA alignment.")
+    package.add_argument(
+        "--cryptic-reference-alignment", required=True, help="Cryptic reference fixed-column FASTA alignment."
+    )
     package.add_argument(
         "--classical-tip-clades",
         help="Optional validated classical reference_tip_id/clade TSV to checksum in the package.",
@@ -368,7 +362,9 @@ def build_parser() -> argparse.ArgumentParser:
         "validate-reference-package",
         help="Validate paired-reference checksums and tree/alignment identity contracts.",
     )
-    validate_package.add_argument("--reference-package", required=True, help="Schema-v1 paired reference package JSON.")
+    validate_package.add_argument(
+        "--reference-package", required=True, help="Schema-v1 paired reference package JSON."
+    )
     return parser
 
 
@@ -480,13 +476,9 @@ def run_place(arguments: argparse.Namespace) -> int:
     query_names = {sequence.sample_id for sequence in queries}
     overlap = sorted(query_names & reference_names)
     if overlap:
-        raise ValueError(
-            "Query sample_id values already occur in the reference tree: " + ", ".join(overlap[:10])
-        )
+        raise ValueError("Query sample_id values already occur in the reference tree: " + ", ".join(overlap[:10]))
 
-    references_in_tip_order = tuple(
-        reference_by_id[tip.name or ""] for tip in tree.tips
-    )
+    references_in_tip_order = tuple(reference_by_id[tip.name or ""] for tip in tree.tips)
     config = placement_config_from_arguments(arguments)
     logger.event(
         1,
@@ -502,9 +494,7 @@ def run_place(arguments: argparse.Namespace) -> int:
     logger.event(1, "placement", "Running placements", workers=workers, preset=config.preset)
     started_placement = time.perf_counter()
     if workers == 1:
-        results = run_serial_placements(
-            queries, references_in_tip_order, tree, config, logger, started_placement
-        )
+        results = run_serial_placements(queries, references_in_tip_order, tree, config, logger, started_placement)
     else:
         try:
             results = run_parallel_placements(
@@ -525,9 +515,7 @@ def run_place(arguments: argparse.Namespace) -> int:
                 error=str(error),
             )
             workers = 1
-            results = run_serial_placements(
-                queries, references_in_tip_order, tree, config, logger, started_placement
-            )
+            results = run_serial_placements(queries, references_in_tip_order, tree, config, logger, started_placement)
 
     summary = summarize_results(results)
     logger.event(1, "placement", "Completed placement", **summary)
@@ -546,7 +534,19 @@ def run_place(arguments: argparse.Namespace) -> int:
     (output / "run.log").write_text(
         "".join(
             f"[{event['elapsed_seconds']:8.2f}s] {event['stage']}: {event['message']}"
-            + (" " + json.dumps({key: value for key, value in event.items() if key not in {'elapsed_seconds', 'level', 'stage', 'message'}}, sort_keys=True) if len(event) > 4 else "")
+            + (
+                " "
+                + json.dumps(
+                    {
+                        key: value
+                        for key, value in event.items()
+                        if key not in {"elapsed_seconds", "level", "stage", "message"}
+                    },
+                    sort_keys=True,
+                )
+                if len(event) > 4
+                else ""
+            )
             + "\n"
             for event in logger.events
         ),
@@ -693,16 +693,8 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
         "cryptic_reference_alignment_path": str(package.cryptic.alignment_path),
         "minimum_distance_separation": minimum_distance_separation,
         "selection_method": "nearest_reference_normalized_hamming_distance",
-        "classical_tip_clades_path": (
-            str(classical_tip_clades_path)
-            if classical_tip_clades_path
-            else None
-        ),
-        "cryptic_tip_clades_path": (
-            str(cryptic_tip_clades_path)
-            if cryptic_tip_clades_path
-            else None
-        ),
+        "classical_tip_clades_path": (str(classical_tip_clades_path) if classical_tip_clades_path else None),
+        "cryptic_tip_clades_path": (str(cryptic_tip_clades_path) if cryptic_tip_clades_path else None),
         "clade_assignment_method": "selected_edge_descendant_tip_labels_with_nearest_reference_fallback",
         "warning": "Distance-separation thresholds require empirical calibration for each pair of panels.",
     }
@@ -728,9 +720,7 @@ def run_classify(arguments: argparse.Namespace) -> int:
     mafft = resolve_mafft_executable(arguments.mafft)
     output = arguments.output or default_classify_output_directory(arguments.query_fasta)
     print(
-        f"Using organism '{arguments.organism}' -> {manifest_path}\n"
-        f"Using MAFFT: {mafft}\n"
-        f"Writing output to: {output}",
+        f"Using organism '{arguments.organism}' -> {manifest_path}\nUsing MAFFT: {mafft}\nWriting output to: {output}",
         file=sys.stderr,
     )
     arguments.reference_package = str(manifest_path)
@@ -775,9 +765,7 @@ def resolve_auto_reference_inputs(
         )
         return package, threshold
     if not all(explicit_values):
-        raise ValueError(
-            "Provide --reference-package or all four explicit classical/cryptic tree and alignment paths"
-        )
+        raise ValueError("Provide --reference-package or all four explicit classical/cryptic tree and alignment paths")
     package = PairedReferencePackage(
         manifest_path=None,
         classical=PanelReference(
@@ -828,9 +816,7 @@ def build_panel_gate_summary(
         "cryptic_controls": cryptic_controls_count,
         "default_threshold": default_threshold,
         "flagged_panel_label_conflicts": conflict_count,
-        "default_result": next(
-            row for row in sweep if row["threshold"] == default_threshold
-        ),
+        "default_result": next(row for row in sweep if row["threshold"] == default_threshold),
         "threshold_sweep": sweep,
         "summary": summarize_clade_calibration(calibration_rows),
         "classical_reference_alignment_sha256": classical_reference_alignment_sha256,
@@ -851,9 +837,7 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
     classical_controls = select_unique_sequence_controls(
         classical_alignment.sequences, arguments.max_controls_per_panel
     )
-    cryptic_controls = select_unique_sequence_controls(
-        cryptic_alignment.sequences, arguments.max_controls_per_panel
-    )
+    cryptic_controls = select_unique_sequence_controls(cryptic_alignment.sequences, arguments.max_controls_per_panel)
     logger.event(
         1,
         "input",
@@ -889,12 +873,10 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
         logger=logger,
     )
     cross_to_cryptic = {
-        sequence.sample_id: sequence
-        for sequence in read_fasta_alignment(classical_to_cryptic).sequences
+        sequence.sample_id: sequence for sequence in read_fasta_alignment(classical_to_cryptic).sequences
     }
     cross_to_classical = {
-        sequence.sample_id: sequence
-        for sequence in read_fasta_alignment(cryptic_to_classical).sequences
+        sequence.sample_id: sequence for sequence in read_fasta_alignment(cryptic_to_classical).sequences
     }
 
     classical_results: list[PlacementResult] = []
@@ -903,22 +885,26 @@ def run_calibrate_panel_gate(arguments: argparse.Namespace) -> int:
     source_id_by_id: dict[str, str] = {}
     for query in classical_queries:
         classical_results.append(
-            qc_only_result(query, references_without_identical_sequence(query, classical_alignment.sequences), arguments)
+            qc_only_result(
+                query, references_without_identical_sequence(query, classical_alignment.sequences), arguments
+            )
         )
-        cryptic_results.append(qc_only_result(cross_to_cryptic[query.sample_id], cryptic_alignment.sequences, arguments))
+        cryptic_results.append(
+            qc_only_result(cross_to_cryptic[query.sample_id], cryptic_alignment.sequences, arguments)
+        )
         truth_by_id[query.sample_id] = "CLASSICAL"
         source_id_by_id[query.sample_id] = query.sample_id.removeprefix("classical::")
     for query in cryptic_queries:
-        classical_results.append(qc_only_result(cross_to_classical[query.sample_id], classical_alignment.sequences, arguments))
+        classical_results.append(
+            qc_only_result(cross_to_classical[query.sample_id], classical_alignment.sequences, arguments)
+        )
         cryptic_results.append(
             qc_only_result(query, references_without_identical_sequence(query, cryptic_alignment.sequences), arguments)
         )
         truth_by_id[query.sample_id] = "CRYPTIC"
         source_id_by_id[query.sample_id] = query.sample_id.removeprefix("cryptic::")
 
-    decisions = choose_reference_panel(
-        classical_results, cryptic_results, arguments.min_panel_distance_separation
-    )
+    decisions = choose_reference_panel(classical_results, cryptic_results, arguments.min_panel_distance_separation)
     conflict_count, calibration_rows, calibration_fields = write_calibration_records(
         output, decisions, truth_by_id, source_id_by_id
     )
@@ -985,9 +971,7 @@ def run_calibrate_clade_assignment(arguments: argparse.Namespace) -> int:
         raise ValueError("Reference tree tips do not exactly match reference alignment IDs")
     labels = load_tip_clades(arguments.tip_clades, tree, "reference")
     label_counts = clade_label_counts(labels)
-    controls = select_clade_calibration_controls(
-        alignment.sequences, labels, arguments.max_controls_per_clade
-    )
+    controls = select_clade_calibration_controls(alignment.sequences, labels, arguments.max_controls_per_clade)
     if not controls:
         raise ValueError("No labelled unique-sequence controls are available for clade calibration")
     logger.event(
@@ -1004,9 +988,7 @@ def run_calibrate_clade_assignment(arguments: argparse.Namespace) -> int:
     for number, held_out_id in enumerate(controls, start=1):
         pruned_tree, _ = tree.without_tip(held_out_id)
         held_out = reference_by_id[held_out_id]
-        pruned_references = tuple(
-            reference_by_id[tip.name or ""] for tip in pruned_tree.tips
-        )
+        pruned_references = tuple(reference_by_id[tip.name or ""] for tip in pruned_tree.tips)
         result = place_query(held_out, pruned_references, pruned_tree, config)
         decision = PanelDecision(
             sample_id=held_out_id,
@@ -1050,15 +1032,15 @@ def run_calibrate_clade_assignment(arguments: argparse.Namespace) -> int:
                 "coverage": result.qc.coverage,
                 "comparable_sites": result.qc.comparable_sites,
                 "nearest_reference_distance": result.qc.nearest_distance,
-                "relative_fit_weight": (
-                    result.best_fit.relative_fit_weight if result.best_fit else None
-                ),
+                "relative_fit_weight": (result.best_fit.relative_fit_weight if result.best_fit else None),
                 "best_objective": result.best_fit.objective if result.best_fit else None,
                 "best_rmse": result.best_fit.rmse if result.best_fit else None,
             }
         )
         if number == len(controls) or number % 10 == 0:
-            logger.event(2, "calibration", "Completed leave-one-out controls", completed=number, controls=len(controls))
+            logger.event(
+                2, "calibration", "Completed leave-one-out controls", completed=number, controls=len(controls)
+            )
     write_clade_calibration_outputs(output, records, arguments, tree, alignment, label_counts)
     summary = summarize_clade_calibration(records)
     logger.event(1, "calibration", "Completed fixed-tree clade calibration", **summary)
@@ -1080,17 +1062,9 @@ def select_clade_calibration_controls(
     by_clade: dict[str, list[str]] = {}
     for sequence in sequences:
         clade = labels.get(sequence.sample_id)
-        if (
-            clade is not None
-            and label_counts[clade] >= 2
-            and counts[sequence.characters] == 1
-        ):
+        if clade is not None and label_counts[clade] >= 2 and counts[sequence.characters] == 1:
             by_clade.setdefault(clade, []).append(sequence.sample_id)
-    return tuple(
-        sample_id
-        for clade in sorted(by_clade)
-        for sample_id in sorted(by_clade[clade])[:maximum_per_clade]
-    )
+    return tuple(sample_id for clade in sorted(by_clade) for sample_id in sorted(by_clade[clade])[:maximum_per_clade])
 
 
 def clade_label_counts(labels: dict[str, str]) -> dict[str, int]:
@@ -1113,10 +1087,23 @@ def write_clade_calibration_outputs(
     """Write auditable records, confusion counts, and provenance for clade calibration."""
 
     fields = [
-        "source_sample_id", "truth_clade", "predicted_clade", "clade_assignment_status",
-        "assignment_method", "outcome", "nearest_reference", "supporting_reference_tips",
-        "findings", "placement_status", "placement_edge_id", "coverage", "comparable_sites",
-        "nearest_reference_distance", "relative_fit_weight", "best_objective", "best_rmse",
+        "source_sample_id",
+        "truth_clade",
+        "predicted_clade",
+        "clade_assignment_status",
+        "assignment_method",
+        "outcome",
+        "nearest_reference",
+        "supporting_reference_tips",
+        "findings",
+        "placement_status",
+        "placement_edge_id",
+        "coverage",
+        "comparable_sites",
+        "nearest_reference_distance",
+        "relative_fit_weight",
+        "best_objective",
+        "best_rmse",
     ]
     with (output / "clade_calibration_records.tsv").open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, delimiter="\t", lineterminator="\n")
@@ -1127,7 +1114,9 @@ def write_clade_calibration_outputs(
         key = (str(record["truth_clade"]), str(record["predicted_clade"] or "UNRESOLVED"))
         confusion[key] = confusion.get(key, 0) + 1
     with (output / "clade_confusion.tsv").open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["truth_clade", "predicted_clade", "controls"], delimiter="\t", lineterminator="\n")
+        writer = csv.DictWriter(
+            handle, fieldnames=["truth_clade", "predicted_clade", "controls"], delimiter="\t", lineterminator="\n"
+        )
         writer.writeheader()
         for (truth, predicted), controls in sorted(confusion.items()):
             writer.writerow({"truth_clade": truth, "predicted_clade": predicted, "controls": controls})
@@ -1162,9 +1151,7 @@ def write_clade_calibration_outputs(
         "reference_columns": getattr(alignment, "site_count"),
         "max_controls_per_clade": arguments.max_controls_per_clade,
         "labelled_reference_tips_per_clade": dict(sorted(label_counts.items())),
-        "excluded_singleton_clades": sorted(
-            clade for clade, count in label_counts.items() if count < 2
-        ),
+        "excluded_singleton_clades": sorted(clade for clade, count in label_counts.items() if count < 2),
         "summary": summarize_clade_calibration(records),
         "summary_by_truth_clade": summarize_clade_calibration_by_truth(records),
     }
@@ -1244,8 +1231,7 @@ def run_calibrate_placement_accuracy(arguments: argparse.Namespace) -> int:
         raise ValueError("Reference tree and alignment IDs differ; " + "; ".join(details))
 
     controls = tuple(
-        sequence.sample_id
-        for sequence in select_unique_sequence_controls(alignment.sequences, arguments.max_controls)
+        sequence.sample_id for sequence in select_unique_sequence_controls(alignment.sequences, arguments.max_controls)
     )
     logger.event(
         1,
@@ -1259,13 +1245,9 @@ def run_calibrate_placement_accuracy(arguments: argparse.Namespace) -> int:
     records: list[dict[str, object]] = []
     for number, held_out_id in enumerate(controls, start=1):
         pruned_tree, attachment = tree.without_tip(held_out_id)
-        pruned_references = tuple(
-            reference_by_id[tip.name or ""] for tip in pruned_tree.tips
-        )
+        pruned_references = tuple(reference_by_id[tip.name or ""] for tip in pruned_tree.tips)
         result = place_query(reference_by_id[held_out_id], pruned_references, pruned_tree, config)
-        grade = grade_placement_accuracy(
-            result, pruned_tree, attachment, arguments.near_hop_threshold
-        )
+        grade = grade_placement_accuracy(result, pruned_tree, attachment, arguments.near_hop_threshold)
         records.append(build_accuracy_record(result, grade, attachment, held_out_id))
         if number == len(controls) or number % 10 == 0:
             logger.event(
@@ -1290,9 +1272,7 @@ def write_placement_accuracy_outputs(
     """Write auditable per-control records and a provenance summary."""
 
     with (output / "placement_accuracy_records.tsv").open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle, fieldnames=list(ACCURACY_RECORD_COLUMNS), delimiter="\t", lineterminator="\n"
-        )
+        writer = csv.DictWriter(handle, fieldnames=list(ACCURACY_RECORD_COLUMNS), delimiter="\t", lineterminator="\n")
         writer.writeheader()
         for record in records:
             writer.writerow({key: "" if value is None else value for key, value in record.items()})
@@ -1334,27 +1314,20 @@ def write_placement_accuracy_outputs(
     return summary
 
 
-def select_unique_sequence_controls(
-    sequences: Sequence[AlignedSequence], maximum: int
-) -> tuple[AlignedSequence, ...]:
+def select_unique_sequence_controls(sequences: Sequence[AlignedSequence], maximum: int) -> tuple[AlignedSequence, ...]:
     """Choose deterministic representatives of distinct aligned sequences."""
 
     groups: dict[tuple[str | None, ...], list[AlignedSequence]] = {}
     for sequence in sequences:
         groups.setdefault(sequence.characters, []).append(sequence)
-    representatives = [
-        min(group, key=lambda sequence: sequence.sample_id) for group in groups.values()
-    ]
+    representatives = [min(group, key=lambda sequence: sequence.sample_id) for group in groups.values()]
     return tuple(sorted(representatives, key=lambda sequence: sequence.sample_id)[:maximum])
 
 
 def calibration_queries(panel: str, controls: Sequence[AlignedSequence]) -> tuple[AlignedSequence, ...]:
     """Prefix query identifiers so equal IDs cannot collide between panels."""
 
-    return tuple(
-        AlignedSequence(f"{panel}::{sequence.sample_id}", sequence.characters)
-        for sequence in controls
-    )
+    return tuple(AlignedSequence(f"{panel}::{sequence.sample_id}", sequence.characters) for sequence in controls)
 
 
 def ungapped_fasta_records(
@@ -1438,8 +1411,15 @@ def write_calibration_records(
     """
 
     fields = [
-        "calibration_id", "source_sample_id", "truth", "assignment", "decision_status",
-        "outcome", "classical_nearest_distance", "cryptic_nearest_distance", "distance_margin",
+        "calibration_id",
+        "source_sample_id",
+        "truth",
+        "assignment",
+        "decision_status",
+        "outcome",
+        "classical_nearest_distance",
+        "cryptic_nearest_distance",
+        "distance_margin",
     ]
     conflicts: list[dict[str, object]] = []
     written_rows: list[dict[str, object]] = []
@@ -1451,7 +1431,9 @@ def write_calibration_records(
             assignment = getattr(decision, "assignment")
             truth = truth_by_id[sample_id]
             called = assignment in {"CLASSICAL", "CRYPTIC"}
-            outcome = "CORRECT_CALL" if assignment == truth else "INCORRECT_CALL" if called else "AMBIGUOUS_OR_UNRESOLVED"
+            outcome = (
+                "CORRECT_CALL" if assignment == truth else "INCORRECT_CALL" if called else "AMBIGUOUS_OR_UNRESOLVED"
+            )
             row: dict[str, object] = {
                 "calibration_id": sample_id,
                 "source_sample_id": source_id_by_id[sample_id],
@@ -1509,20 +1491,15 @@ def map_queries_to_panel(
     mafft_stderr.write_text(completed.stderr, encoding="utf-8")
     if completed.returncode:
         raise ValueError(
-            f"MAFFT mapping failed for the {panel_name} panel (exit {completed.returncode}); "
-            f"see {mafft_stderr}"
+            f"MAFFT mapping failed for the {panel_name} panel (exit {completed.returncode}); see {mafft_stderr}"
         )
     mapped_by_id = dict(read_fasta_records(mapped_with_reference))
     missing = [sample_id for sample_id in query_ids if sample_id not in mapped_by_id]
     if missing:
-        raise ValueError(
-            f"MAFFT output for the {panel_name} panel omitted query IDs: {', '.join(missing[:10])}"
-        )
+        raise ValueError(f"MAFFT output for the {panel_name} panel omitted query IDs: {', '.join(missing[:10])}")
     mapped_queries = mapping_directory / f"{panel_name}.queries_mapped.fasta"
     write_fasta_records(mapped_queries, tuple((sample_id, mapped_by_id[sample_id]) for sample_id in query_ids))
-    require_matching_alignment_widths(
-        read_fasta_alignment(reference_alignment), read_fasta_alignment(mapped_queries)
-    )
+    require_matching_alignment_widths(read_fasta_alignment(reference_alignment), read_fasta_alignment(mapped_queries))
     logger.event(
         1,
         "mapping",
@@ -1590,7 +1567,13 @@ def run_panel_placement(
                 started,
             )
         except PermissionError as error:
-            logger.event(1, "placement", "Parallel workers unavailable; using serial placement", panel=panel_name, error=str(error))
+            logger.event(
+                1,
+                "placement",
+                "Parallel workers unavailable; using serial placement",
+                panel=panel_name,
+                error=str(error),
+            )
             workers = 1
             results = run_serial_placements(query_alignment.sequences, references, tree, config, logger, started)
     summary = summarize_results(results)
@@ -1603,7 +1586,12 @@ def run_panel_placement(
         tree_sha256=file_sha256(tree_path),
         reference_alignment_sha256=file_sha256(reference_alignment_path),
         query_alignment_sha256=file_sha256(query_alignment_path),
-        config={**asdict(config), "input_kind": "mafft_add_keeplength_mapped_fasta", "panel": panel_name, "workers": workers},
+        config={
+            **asdict(config),
+            "input_kind": "mafft_add_keeplength_mapped_fasta",
+            "panel": panel_name,
+            "workers": workers,
+        },
     )
     write_run_outputs(output_directory, tree, results, metadata, logger.events)
     return PanelRun(panel_name, tree, tuple(results))
@@ -1619,9 +1607,7 @@ def write_selected_panel_trees(
 
     selected_ids = {
         panel: {
-            getattr(decision, "sample_id")
-            for decision in decisions
-            if getattr(decision, "selected_panel") == panel
+            getattr(decision, "sample_id") for decision in decisions if getattr(decision, "selected_panel") == panel
         }
         for panel in ("classical", "cryptic")
     }
@@ -1651,10 +1637,7 @@ def summarize_clade_assignments(assignments: Sequence[object]) -> dict[str, int]
     for assignment in assignments:
         status = str(getattr(assignment, "clade_assignment_status"))
         counts[status] = counts.get(status, 0) + 1
-    return {
-        f"clade_assignments_{status.lower()}": count
-        for status, count in sorted(counts.items())
-    }
+    return {f"clade_assignments_{status.lower()}": count for status, count in sorted(counts.items())}
 
 
 def placement_config_from_arguments(arguments: argparse.Namespace) -> PlacementConfig:
@@ -1693,9 +1676,7 @@ def run_parallel_placements(
         initializer=worker_initialize,
         initargs=(tree_newick, references, config, max_cache_megabytes),
     ) as executor:
-        futures = {
-            executor.submit(worker_place, query): index for index, query in enumerate(queries)
-        }
+        futures = {executor.submit(worker_place, query): index for index, query in enumerate(queries)}
         completed = 0
         for future in as_completed(futures):
             index = futures[future]

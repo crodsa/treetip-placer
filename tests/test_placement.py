@@ -30,7 +30,9 @@ class PlacementTests(unittest.TestCase):
         )
 
     def test_exact_sequence_joins_its_reference_terminal_edge(self) -> None:
-        result = place_query(AlignedSequence("query_A", self.references[0].characters), self.references, self.tree, self.config)
+        result = place_query(
+            AlignedSequence("query_A", self.references[0].characters), self.references, self.tree, self.config
+        )
 
         self.assertEqual(result.final_status, "PASS")
         self.assertIsNotNone(result.best_fit)
@@ -41,9 +43,7 @@ class PlacementTests(unittest.TestCase):
         self.assertAlmostEqual(result.best_fit.objective, 0.0)
 
     def test_missing_sequence_fails_preplacement_qc(self) -> None:
-        result = place_query(
-            AlignedSequence("empty", (None,) * 8), self.references, self.tree, self.config
-        )
+        result = place_query(AlignedSequence("empty", (None,) * 8), self.references, self.tree, self.config)
 
         self.assertEqual(result.final_status, "FAIL")
         self.assertIsNone(result.best_fit)
@@ -64,12 +64,12 @@ class PlacementTests(unittest.TestCase):
         )
 
         self.assertEqual(result.final_status, "WARN")
-        self.assertTrue(
-            any(finding.code == "DIFFUSE_DISTANCE_WEIGHT" for finding in result.qc.findings)
-        )
+        self.assertTrue(any(finding.code == "DIFFUSE_DISTANCE_WEIGHT" for finding in result.qc.findings))
 
     def test_rendered_tree_is_parseable_and_contains_query(self) -> None:
-        result = place_query(AlignedSequence("query_A", self.references[0].characters), self.references, self.tree, self.config)
+        result = place_query(
+            AlignedSequence("query_A", self.references[0].characters), self.references, self.tree, self.config
+        )
         rendered = render_placed_tree(self.tree, [result])
 
         reparsed = Tree.from_newick(rendered)

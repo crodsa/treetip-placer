@@ -1,6 +1,6 @@
 # Project handoff
 
-Last updated: 2026-08-06
+Last updated: 2026-08-09
 
 ## Purpose
 
@@ -17,6 +17,7 @@ TreeTip Placer places aligned nucleotide sequences on an immutable reference tre
 - `calibrate-clade-assignment` performs deterministic labelled leave-one-unique-sequence-out controls against a fixed tree, writing record-level outcomes and a clade confusion table without recalculating topology or phylogenetic support. `assign_phylogenetic_clades` arbitrates a single-clade edge consensus against the query's nearest labelled reference (by real genetic distance) when the two disagree, trusting the distance signal — see "Current reference panel" below for the real-panel finding that motivated this and the FastBAPS cross-check that confirmed it.
 - `calibrate-placement-accuracy` grades leave-one-out placement geometry against each control's recorded attachment in edge hops and in branch-length-weighted (patristic) distance, writing per-control records, a hop distribution, a patristic-distance summary, and an HTML report. `Tree.patristic_distance_to_attachment` was added after a real cryptic-panel run (68 tips, MLST-scheme resolution) graded nearly every control `FAR` or `NEAR` by hop count alone while `nearest_reference_distance` stayed under 0.002 throughout: the hop count and the genetic distance recovered can disagree sharply on a tree with many near-zero-length branches, and the patristic distance is what makes that visible instead of reading as a placement failure.
 - All three calibration commands write a `report.html` index beside their authoritative TSV and JSON sidecars.
+- Automatic placement reports now render exactly two figures per selected query: a global clade-context overview that never shows reference-tip identifiers and a topology-derived local placement branch that names only visible neighbours and highlights the query attachment edge. Both are display-only.
 
 ## Important limitations
 
@@ -25,6 +26,7 @@ TreeTip Placer places aligned nucleotide sequences on an immutable reference tre
 - Relative-fit weights are heuristic, not likelihood weight ratios or posterior probabilities.
 - Reference-panel QC thresholds require local calibration and cannot be transferred blindly between cryptic-only and mixed cryptic–classical panels.
 - The placement-accuracy grade is an unweighted topology diagnostic on a fixed backbone, not phylogenetic support or branch-length error. The `--near-hop-threshold` default of 2 is provisional and has not been calibrated against real panels. On a poorly resolved reference tree (many near-zero-length branches, typical of a short MLST scheme rather than core-genome or SNP-based alignment), the hop-based grade alone can look poor while `patristic_distance_from_truth` and `nearest_reference_distance` both stay small; read both before concluding placement itself is inaccurate.
+- The repository source is Apache-2.0, but the committed C. difficile reference package is separately restricted and is not cleared for public redistribution. Do not make the repository public until `docs/public-release.md` is complete.
 
 ## Verified command
 

@@ -126,9 +126,7 @@ class CladeAssignmentTests(unittest.TestCase):
             assignment.assignment_method,
             "nearest_labelled_reference_edge_consensus_conflict",
         )
-        self.assertIn(
-            "SELECTED_EDGE_CONSENSUS_DISAGREES_WITH_NEAREST_REFERENCE", assignment.findings
-        )
+        self.assertIn("SELECTED_EDGE_CONSENSUS_DISAGREES_WITH_NEAREST_REFERENCE", assignment.findings)
         self.assertEqual(assignment.supporting_reference_tips, ("A",))
 
     def test_edge_consensus_agreeing_with_nearest_reference_still_passes(self) -> None:

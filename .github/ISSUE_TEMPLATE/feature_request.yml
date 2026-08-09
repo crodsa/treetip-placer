@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a focused, evidence-backed improvement.
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Scientific or user problem
+      description: State the decision this feature would improve and the current limitation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: Include input/output contract, uncertainty handling, and reproducibility implications.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation plan
+      description: Describe synthetic fixtures, tests, and any required empirical calibration.
+    validations:
+      required: true
