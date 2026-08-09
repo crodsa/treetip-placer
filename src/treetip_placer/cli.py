@@ -7,7 +7,6 @@ import csv
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -15,7 +14,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Sequence
 
 from . import __version__
 from .alignment import (
@@ -29,6 +28,11 @@ from .clade_assignment import (
     assign_phylogenetic_clades,
     load_tip_clades,
     write_clade_assignment_outputs,
+)
+from .environment import (
+    managed_environment_prefix,
+    resolve_mafft_for_classification,
+    setup_mafft_environment,
 )
 from .models import AlignedSequence, PlacementConfig, PlacementResult, RunMetadata
 from .outputs import render_placed_tree, write_run_outputs
@@ -82,20 +86,6 @@ def resolve_organism_reference_package(organism: str) -> Path:
             f"expected {manifest_path}. Check that the repository checkout is complete."
         )
     return manifest_path
-
-
-def resolve_mafft_executable(explicit: str | None, *, path_lookup: Callable[[str], str | None] = shutil.which) -> str:
-    """Return the MAFFT executable to use, auto-detecting it on PATH if not given."""
-
-    if explicit:
-        return explicit
-    found = path_lookup("mafft")
-    if found is None:
-        raise ValueError(
-            "MAFFT was not found on PATH. Install it (https://mafft.cbrc.jp/alignment/software/) "
-            "or pass --mafft /path/to/mafft explicitly."
-        )
-    return found
 
 
 def default_classify_output_directory(query_fasta: str, *, now: datetime | None = None) -> str:
@@ -229,7 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     classify.add_argument(
         "--mafft",
-        help="MAFFT executable. Auto-detected on PATH (via `which mafft`) if omitted.",
+        help="MAFFT executable. Defaults to the verified `treetip setup` environment, then PATH.",
     )
     classify.add_argument("--mafft-threads", type=positive_integer, default=1, help="MAFFT threads per mapping.")
     classify.add_argument(
@@ -240,6 +230,16 @@ def build_parser() -> argparse.ArgumentParser:
         "Defaults to the bundled package's own calibrated value.",
     )
     add_placement_controls(classify)
+
+    setup = subparsers.add_parser(
+        "setup",
+        help="Create or verify a dedicated MAFFT environment for automatic classification.",
+    )
+    setup.add_argument(
+        "--refresh",
+        action="store_true",
+        help="Recreate only TreeTip's managed MAFFT environment before verifying it.",
+    )
 
     calibrate = subparsers.add_parser(
         "calibrate-panel-gate",
@@ -428,6 +428,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return run_auto_place(arguments)
         if arguments.command == "classify":
             return run_classify(arguments)
+        if arguments.command == "setup":
+            return run_setup(arguments)
         if arguments.command == "calibrate-panel-gate":
             return run_calibrate_panel_gate(arguments)
         if arguments.command == "calibrate-clade-assignment":
@@ -691,6 +693,9 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
         "classical_reference_alignment_path": str(package.classical.alignment_path),
         "cryptic_tree_path": str(package.cryptic.tree_path),
         "cryptic_reference_alignment_path": str(package.cryptic.alignment_path),
+        "mafft_executable": str(Path(arguments.mafft).resolve()),
+        "mafft_version": getattr(arguments, "mafft_version", None),
+        "mafft_source": getattr(arguments, "mafft_source", "explicit"),
         "minimum_distance_separation": minimum_distance_separation,
         "selection_method": "nearest_reference_normalized_hamming_distance",
         "classical_tip_clades_path": (str(classical_tip_clades_path) if classical_tip_clades_path else None),
@@ -717,10 +722,12 @@ def run_classify(arguments: argparse.Namespace) -> int:
     """
 
     manifest_path = resolve_organism_reference_package(arguments.organism)
-    mafft = resolve_mafft_executable(arguments.mafft)
+    mafft = resolve_mafft_for_classification(arguments.mafft)
     output = arguments.output or default_classify_output_directory(arguments.query_fasta)
     print(
-        f"Using organism '{arguments.organism}' -> {manifest_path}\nUsing MAFFT: {mafft}\nWriting output to: {output}",
+        f"Using organism '{arguments.organism}' -> {manifest_path}\n"
+        f"Using MAFFT {mafft.version} ({mafft.source}): {mafft.executable}\n"
+        f"Writing output to: {output}",
         file=sys.stderr,
     )
     arguments.reference_package = str(manifest_path)
@@ -730,9 +737,31 @@ def run_classify(arguments: argparse.Namespace) -> int:
     arguments.cryptic_reference_alignment = None
     arguments.classical_tip_clades = None
     arguments.cryptic_tip_clades = None
-    arguments.mafft = mafft
+    arguments.mafft = str(mafft.executable)
+    arguments.mafft_version = mafft.version
+    arguments.mafft_source = mafft.source
     arguments.output = output
     return run_auto_place(arguments)
+
+
+def run_setup(arguments: argparse.Namespace) -> int:
+    """Create or verify the dedicated MAFFT environment used by classify."""
+
+    if arguments.refresh:
+        print(
+            f"Refreshing only TreeTip's managed MAFFT environment: {managed_environment_prefix()}",
+            file=sys.stderr,
+        )
+    result = setup_mafft_environment(refresh=arguments.refresh)
+    action = "Created" if result.created else "Verified"
+    print(
+        f"{action} TreeTip MAFFT environment\n"
+        f"Manager: {result.manager}\n"
+        f"Environment: {result.environment_prefix}\n"
+        f"MAFFT {result.mafft.version}: {result.mafft.executable}\n"
+        f"Configuration: {result.config_path}"
+    )
+    return 0
 
 
 def resolve_tip_clades_path(explicit_path: str | None, panel: PanelReference) -> Path | None:

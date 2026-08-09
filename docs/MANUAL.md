@@ -15,7 +15,7 @@ It does this by comparing your sequence to a fixed reference collection of alrea
 ## Before you start: what you need
 
 1. **The tool installed** (see below).
-2. **MAFFT** installed and on your system (a free, widely used sequence-alignment program: <https://mafft.cbrc.jp/alignment/software/>). TreeTip Placer uses it internally to line up your sequences against the reference. `classify` (below) finds it automatically if it's on your system `PATH`.
+2. **A Conda-compatible environment manager**: `micromamba`, `mamba`, or `conda`. The one-time `treetip setup` command installs and verifies the MAFFT version TreeTip Placer uses internally. You do not need to install MAFFT separately.
 3. **Your own sequences as a FASTA file.** Each sequence should be the concatenation of the same 7 MLST loci (adk, atpA, dxr, glyA, recA, sodA, tpi) the bundled reference was built from, one entry per isolate, with a short unique name after the `>` on each header line. If you are not sure your sequences are in the right format, placement will refuse to run rather than silently guess.
 
 You do **not** need to separately locate a reference package — one ships with this repository and `classify` finds it on its own; see below.
@@ -28,9 +28,18 @@ You need Python 3.11 or newer. From a terminal, inside the project folder:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
+treetip setup
 ```
 
-Confirm it installed correctly:
+`treetip setup` creates a dedicated TreeTip environment, installs the pinned
+MAFFT version through the first available manager (`micromamba`, then `mamba`,
+then `conda`), verifies it, and records its exact path. It does not alter your
+current environment or `PATH`. If this dedicated environment needs to be
+recreated, use `treetip setup --refresh` deliberately.
+Managed setup supports macOS and Linux; on Windows, run TreeTip Placer in a
+Linux environment such as WSL or provide a verified MAFFT path explicitly.
+
+Confirm the command-line installation:
 
 ```bash
 treetip --version
@@ -50,7 +59,7 @@ That's the whole command for routine use. It prints the three things it resolved
 
 ```
 Using organism 'cdifficile-mlst' -> reference-packages/mlst-cdifficile-20260806/paired_reference.json
-Using MAFFT: /usr/local/bin/mafft
+Using MAFFT 7.526 (managed_environment): /path/to/treetip-placer/environments/mafft-7.526/bin/mafft
 Writing output to: my_isolates_classify_20260806T142530Z
 ```
 
@@ -131,3 +140,10 @@ The current reference collection is built from 7 MLST genes (not full genomes). 
 - **A result surprises you**: open `report.html` and look at the tree picture and the distance numbers for that isolate before assuming the tool is wrong — the numbers are there specifically so you can check the reasoning, not just the label.
 
 For anything else, contact whoever maintains the reference package for your lab.
+
+## Administrator details
+
+`treetip setup` stores its configuration and managed environment in standard
+user-scoped platform directories. Administrators and test systems can redirect
+them with `TREETIP_CONFIG_DIR` and `TREETIP_DATA_DIR`; this makes managed setup
+independent of shared Conda environments.

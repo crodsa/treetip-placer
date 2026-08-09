@@ -10,9 +10,9 @@ from datetime import datetime, timezone
 
 from treetip_placer.cli import (
     ORGANISM_REFERENCE_PACKAGES,
+    build_parser,
     default_classify_output_directory,
     main,
-    resolve_mafft_executable,
     resolve_organism_reference_package,
     select_clade_calibration_controls,
 )
@@ -155,18 +155,11 @@ class CliTests(unittest.TestCase):
         finally:
             del ORGANISM_REFERENCE_PACKAGES["nonexistent-test-organism"]
 
-    def test_resolve_mafft_executable_prefers_the_explicit_path(self) -> None:
-        self.assertEqual(resolve_mafft_executable("/custom/path/to/mafft"), "/custom/path/to/mafft")
+    def test_setup_command_is_available(self) -> None:
+        arguments = build_parser().parse_args(["setup", "--refresh"])
 
-    def test_resolve_mafft_executable_raises_a_clear_error_when_not_found(self) -> None:
-        with self.assertRaisesRegex(ValueError, "MAFFT"):
-            resolve_mafft_executable(None, path_lookup=lambda _name: None)
-
-    def test_resolve_mafft_executable_falls_back_to_path_lookup(self) -> None:
-        self.assertEqual(
-            resolve_mafft_executable(None, path_lookup=lambda _name: "/usr/local/bin/mafft"),
-            "/usr/local/bin/mafft",
-        )
+        self.assertEqual(arguments.command, "setup")
+        self.assertTrue(arguments.refresh)
 
     def test_default_classify_output_directory_is_stem_based_and_stable(self) -> None:
         fixed_now = datetime(2026, 8, 6, 12, 30, 45, tzinfo=timezone.utc)
