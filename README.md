@@ -6,7 +6,7 @@ TreeTip Placer adds query sequences to an immutable, branch-length reference tre
 
 ## Bundled reference package
 
-A ready-to-use paired classical/cryptic *Clostridioides difficile* reference package, built from concatenated 7-locus MLST alleles, ships in this repository at [`reference-packages/mlst-cdifficile-20260806/`](reference-packages/mlst-cdifficile-20260806/). It is committed with the repository owner's explicit permission — see `AGENTS.md`'s data-in-version-control rule and `docs/HANDOFF.md`'s "Current reference panel" section for full provenance, methodology, and calibration numbers. The package's own `README.md` has the quick-start command.
+A ready-to-use paired classical/cryptic *Clostridioides difficile* reference package, built from concatenated 7-locus MLST alleles, is available at [`reference-packages/mlst-cdifficile-20260806/`](reference-packages/mlst-cdifficile-20260806/). Its `README.md` contains the quick-start command; `docs/HANDOFF.md` records its provenance, methodology, and calibration boundaries.
 
 > **Public-release boundary:** the Apache-2.0 licence covers the software and documentation, not this reference package. The package remains private until its upstream redistribution rights are documented. Do not change repository visibility while [`docs/public-release.md`](docs/public-release.md) lists this blocker.
 
@@ -169,4 +169,4 @@ Do not commit private alignments, genomes, isolates, identifiers, or credentials
 
 ## License
 
-This private development repository is proprietary and research/development-only. Redistribution or public release requires explicit written permission; see [LICENSE](LICENSE).
+TreeTip Placer source code and documentation are licensed under [Apache-2.0](LICENSE). The bundled reference package has a separate licence and is not cleared for public redistribution; see its [package licence](reference-packages/mlst-cdifficile-20260806/LICENSE) and [public-release gates](docs/public-release.md).
