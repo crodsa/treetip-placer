@@ -16,7 +16,7 @@ It does this by comparing your sequence to a fixed reference collection of alrea
 
 1. **The tool installed** (see below).
 2. **A Conda-compatible environment manager**: `micromamba`, `mamba`, or `conda`. The one-time `treetip setup` command installs and verifies the MAFFT version TreeTip Placer uses internally. You do not need to install MAFFT separately.
-3. **Your own sequences as a FASTA file.** Each sequence should be the concatenation of the same 7 MLST loci (adk, atpA, dxr, glyA, recA, sodA, tpi) the bundled reference was built from, one entry per isolate, with a short unique name after the `>` on each header line. If you are not sure your sequences are in the right format, placement will refuse to run rather than silently guess.
+3. **Your own sequences as a FASTA file.** Each sequence should be the concatenation of the same 7 MLST loci (adk, atpA, dxr, glyA, recA, sodA, tpi) the bundled reference was built from, one entry per isolate, with a short unique name after the `>` on each header line. TreeTip validates FASTA structure and mapped-sequence QC, but it cannot infer whether an upstream workflow extracted the correct loci or joined them in the correct order. Confirm that preparation before running.
 
 You do **not** need to separately locate a reference package — one ships with this repository and `classify` finds it on its own; see below.
 
@@ -67,7 +67,10 @@ Writing output to: my_isolates_classify_20260806T142530Z
 
 Override anything it would have picked automatically if you need to: `--output my_results` to name the folder yourself, `--mafft /path/to/mafft` if you have more than one copy installed, or `--min-panel-distance-separation` to override the package's own calibrated threshold. Everything not given a value falls back to the automatic choice above.
 
-A run over a handful of isolates typically finishes in well under a minute.
+Runtime depends on the number of isolates, hardware, search preset, worker
+count, and whether bootstrap replicates were requested. No formal runtime
+benchmark is claimed for the current private release; use the completion event
+and output manifest to confirm that a run finished.
 
 ### If you need more control: `place-auto`
 
@@ -85,7 +88,7 @@ Use this if `classify`'s auto-detection picks something you don't want and no ov
 
 ## Reading the results
 
-Open **`report.html`** inside your output folder in any web browser. This is the file to look at first — it has everything in one place:
+Open **`report.html`** inside your output folder in any web browser. This is the file to look at first — it summarizes the run in one place:
 
 - A summary count of how many isolates were called `CLASSICAL`, `CRYPTIC`, `AMBIGUOUS`, or `UNRESOLVED`.
 - A table with one row per isolate: its call, its clade, and the distances that call was based on.
@@ -95,6 +98,11 @@ The underlying data behind that report also lives in the same folder as plain ta
 
 - `panel_assignment.tsv` — the classical/cryptic call, per isolate.
 - `clade_assignment.tsv` — the clade call, per isolate.
+
+The report is a human-readable index. The TSV and JSON sidecars retain the
+authoritative decisions and QC. See the
+[complete output map](../README.md#-complete-output-map) for mappings,
+panel-specific placements, alternatives, trees, manifests, and logs.
 
 ### What the labels mean
 
@@ -106,10 +114,14 @@ The underlying data behind that report also lives in the same folder as plain ta
 | `AMBIGUOUS` | Close to both — the tool declines to guess. Treat as needing manual review. |
 | `UNRESOLVED` | The sequence itself had a quality problem (too much missing data, too little overlap with the reference, etc.) before a call could even be attempted. |
 
-**Confidence status** (`PASS` / `WARN`), shown per isolate in the tables:
+**Decision and clade status**, shown per isolate in the tables:
 
-- `PASS` means nothing about the placement looked unusual.
-- `WARN` means the call was still made, but something about it deserves a second look — for example, the isolate landed in a part of the reference tree where nearby branches carry different clade labels, or the fit to its nearest neighbor was a little looser than typical. `WARN` is not a failure; it is the tool being honest about a borderline case instead of hiding it.
+- `PASS` means no rule changed that layer to a warning or no-call. Still inspect
+  the Findings column, especially when bootstrap was requested.
+- `WARN` means the call was still made, but something about it deserves a second look — for example, nearby branches carry different clade labels or candidate edge fits were diffuse. `WARN` is not a failure or a probability; read its named findings.
+- `UNRESOLVED` means the available evidence did not support that decision
+  layer. A per-panel `FAIL` records blocking QC; the other panel can still be
+  considered if it remains eligible.
 
 If you see a lot of `WARN` or `AMBIGUOUS` results on isolates you have independent reason to trust, that is worth flagging to whoever maintains the reference package — it may mean the reference collection needs to grow to cover that part of the diversity better.
 
@@ -119,10 +131,10 @@ Every `report.html` row and every line of `panel_assignment.tsv` / `clade_assign
 
 | Code | In plain terms |
 | --- | --- |
-| `SELECTED_EDGE_CONSENSUS_DISAGREES_WITH_NEAREST_REFERENCE` | The clade call was decided by the isolate's single closest match in the reference collection, because a broader look at nearby branches would have suggested a different (and less reliable) answer. This is the tool correctly resolving a conflict, not a defect. |
+| `SELECTED_EDGE_CONSENSUS_DISAGREES_WITH_NEAREST_REFERENCE` | The selected edge's descendant labels and the nearest labelled reference disagree. The configured rule retains the nearest-reference label as `WARN`; review the conflict rather than treating it as a clean consensus. |
 | `MIXED_CLADE_LABELS_ON_SELECTED_EDGE` | The isolate landed in a part of the reference tree where neighboring reference isolates don't all agree on their clade label, so the closest single match was used instead of a broader consensus. |
-| `DIFFUSE_DISTANCE_WEIGHT` | The statistical fit to the nearest reference was looser than typical — still the best available match, just not a sharp, unambiguous one. |
-| `LONG_TERMINAL_BRANCH` | The isolate is noticeably more distant from its nearest reference than is typical for this collection. Worth a second look if that distance matters for your purpose. |
+| `DIFFUSE_DISTANCE_WEIGHT` | The heuristic weight was spread across alternative tree edges — the selected edge was still the best available fit, but it was not sharply separated. This weight is not a probability. |
+| `LONG_TERMINAL_BRANCH` | The fitted terminal branch is more than three times the nearest-reference distance. Review the input, nearest match, and placement alternatives. |
 | `UNSTABLE_BOOTSTRAP_PLACEMENT` | (Only appears if bootstrap replicates were requested.) Repeated resampling of the alignment did not consistently support the same placement. |
 | `PANEL_DISTANCE_MARGIN_TOO_SMALL` | The isolate is nearly equally close to both the classical and cryptic collections — this is what produces an `AMBIGUOUS` call. |
 | `PARTIAL_COVERAGE` / `LOW_COVERAGE` | Part of the isolate's sequence didn't align to usable reference positions. `LOW_COVERAGE` is severe enough to block a call (`UNRESOLVED`); `PARTIAL_COVERAGE` is not. |
@@ -131,12 +143,19 @@ Every `report.html` row and every line of `panel_assignment.tsv` / `clade_assign
 
 ### A note on precision
 
-The current reference collection is built from 7 MLST genes (not full genomes). That is enough to separate classical from cryptic isolates very reliably, and to place an isolate within the right clade. It is **not** enough to resolve fine differences between two isolates that are genetically very close to each other — don't over-interpret small distance differences as if they were whole-genome resolution. If you need finer resolution, ask whoever maintains the reference package whether a core-genome or whole-genome version is planned.
+The current reference collection is built from 7 MLST genes, not full genomes.
+Internal leave-one-out controls support panel discrimination and clade-label
+recovery for this exact package; they are not an external performance estimate.
+Seven loci are **not** enough to resolve fine differences between two isolates
+that are genetically very close to each other — do not over-interpret small
+distance differences as if they had whole-genome resolution. Use an
+appropriately validated core-genome or whole-genome workflow when finer
+resolution is required.
 
 ## If something looks wrong
 
-- **The command fails immediately with a message about mismatched columns or IDs**: your FASTA file's sequences are probably not the same 7-locus MLST format the reference was built from. Confirm the format with whoever built the reference package.
-- **Every one of your isolates comes back `UNRESOLVED`**: check your FASTA file isn't empty or truncated, and that sequence names don't contain unusual characters.
+- **The command reports duplicate IDs, reference-ID overlap, or invalid FASTA structure**: make each first header token unique, keep sequence content after a header, and do not reuse a bundled reference-tip ID.
+- **Every one of your isolates comes back `UNRESOLVED`**: inspect the Findings column for low coverage or insufficient comparable sites, then confirm that the input contains the correct seven nucleotide loci in the required order and is not a genome assembly.
 - **A result surprises you**: open `report.html` and look at the tree picture and the distance numbers for that isolate before assuming the tool is wrong — the numbers are there specifically so you can check the reasoning, not just the label.
 
 For anything else, contact whoever maintains the reference package for your lab.

@@ -1,6 +1,6 @@
 # Project handoff
 
-Last updated: 2026-08-09
+Last updated: 2026-08-15
 
 ## Purpose
 
@@ -123,6 +123,12 @@ The target reference definition is seven ANI-defined clades in each panel: seven
 
 ## Repository state
 
-Private development backup: `https://github.com/crodsa/treetip-placer` on `main`. Real data, local analysis outputs, and supplementary input tables must remain outside Git by default; the committed `reference-packages/mlst-cdifficile-20260806/` is an explicit, owner-approved exception (see "Current reference panel" above and `AGENTS.md`), not a change to the default policy. The full audit trail (calibration runs, support-labelled trees) stays outside Git at `~/Desktop/treetip-placer-mlst-panel-20260806/`. `docs/MANUAL.md` is the plain-language guide for end users running `place-auto` on their own isolates; this file remains the guide for whoever builds and maintains the tool and its reference packages.
+Private development backup: `https://github.com/crodsa/treetip-placer` on `main`. Real data, local analysis outputs, and supplementary input tables must remain outside Git by default; the committed `reference-packages/mlst-cdifficile-20260806/` is an explicit, owner-approved exception (see "Current reference panel" above and `AGENTS.md`), not a change to the default policy. The full audit trail (calibration runs, support-labelled trees) stays outside Git at `~/Desktop/treetip-placer-mlst-panel-20260806/`. `docs/MANUAL.md` is the plain-language guide for end users running routine `classify` or explicit `place-auto`; this file remains the guide for whoever builds and maintains the tool and its reference packages.
 
-The fixed-tree clade-assignment interface and its internal validation command are implemented, but local clade-specific calibration must be reviewed before it can be considered production-ready — and that review has not yet happened for the current (2026-08-06) panel specifically (milestone 9 above).
+The fixed-tree clade-assignment interface and all three internal calibration
+commands are implemented. The current 2026-08-06 package has undergone the
+internal panel, clade, and placement review recorded above, including the
+milestone 9 correction and re-calibration. Production or external
+generalization still requires independent labelled test sets and the remaining
+milestones and public-release gates; the internal review does not replace
+those.

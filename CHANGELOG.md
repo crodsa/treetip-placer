@@ -7,6 +7,10 @@ once public releases begin.
 
 ### Changed
 
+- Expanded the README into a layered external-user guide covering first use,
+  input preparation, decision logic, complete outputs, methods, package
+  evidence, interpretation, limitations, and advanced documentation; corrected
+  linked manual and handoff statements that contradicted the verified contract.
 - Reworked automatic-placement HTML reports into two complementary per-query
   views: a reference-name-free global clade context and a topology-derived local
   placement branch with named neighbours.
