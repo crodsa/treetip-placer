@@ -13,12 +13,6 @@ JSON, tree, manifest, and log files for review or downstream analysis. The tool
 is deliberately conservative: it records an ambiguous or unresolved result
 when the available sequence does not support a clear call.
 
-> **Current availability:** this repository is private and requires authorized
-> GitHub access. The software and documentation are Apache-2.0 licensed, but
-> the bundled reference package is separately restricted and is not cleared
-> for public redistribution. TreeTip Placer is a research and screening tool,
-> not a clinical diagnostic.
-
 ---
 
 ## 📋 Contents
@@ -34,11 +28,6 @@ when the available sequence does not support a clear call.
 
 ## 🎯 What TreeTip Placer answers
 
-*Clostridioides difficile*, often shortened to *C. difficile* or *C. diff*, is
-a bacterial species associated with diarrhoea and inflammation of the
-colon.[^1] TreeTip Placer does not diagnose infection. It works only with
-prepared nucleotide sequence data from an isolate.
-
 For each input isolate, it asks:
 
 1. Is the sequence distinctly closer to the bundled **classical** panel or the
@@ -48,9 +37,7 @@ For each input isolate, it asks:
    rule require a warning or no-call?
 
 Here, **classical** means the package's five `Clade-1` to `Clade-5` reference
-groups. **Cryptic** means its seven `C-I` to `C-VII` groups. These are
-operational labels from this versioned reference package, not diagnoses or
-probabilities.
+groups. **Cryptic** means its seven `C-I` to `C-VII` phylogroups. 
 
 ### Concepts in plain language
 
@@ -59,7 +46,7 @@ probabilities.
 | **Isolate** | One bacterial sample or culture represented by one input sequence. |
 | **FASTA** | A text format in which a line beginning with `>` names a record and the following line or lines contain its sequence. |
 | **Locus** | A defined region of DNA. This workflow uses seven housekeeping-gene loci. |
-| **MLST** | Multilocus sequence typing: a typing scheme based on defined allele sequences from several loci. PubMLST assigns identifiers to alleles and to each unique allele combination, called a sequence type or ST.[^2] |
+| **MLST** | Multilocus sequence typing: a typing scheme based on defined allele sequences from several loci. PubMLST assigns identifiers to alleles and to each unique allele combination, called a sequence type or ST.[^1] |
 | **Concatenation** | The seven locus sequences joined end to end in one required order, without headings or separators inside the sequence. |
 | **Reference panel** | A curated alignment and tree whose tips already represent known sequences and clade labels. |
 | **Clade** | A named reference grouping used by the package. A TreeTip clade result inherits an existing label; it does not create a new clade. |
@@ -93,9 +80,6 @@ exact order:
 adk -> atpA -> dxr -> glyA -> recA -> sodA -> tpi
 ```
 
-This small synthetic file illustrates the FASTA structure only. Its sequences
-are deliberately too short to classify and contain no biological data:
-
 ```fasta
 >example_A
 ATGCGTACGTTAGCTAGCTACGATCGATCGTACGATGCTAGCTAGCATCGATCGATCGTACG
@@ -126,9 +110,7 @@ sequences with a validated upstream MLST workflow before using this tool.
 
 ### 2. Install the software
 
-A **terminal** is the text window in which you type commands. On macOS, use
-Terminal; on Linux, use your distribution's terminal application. Run the
-following commands one at a time:
+Run the following commands one at a time:
 
 ```bash
 git clone https://github.com/crodsa/treetip-placer.git
@@ -187,10 +169,8 @@ refuses to overwrite a non-empty output directory.
 
 ### 4. Open the result
 
-Open the reported output directory and double-click `report.html`. It is a
-self-contained summary that can be opened in an ordinary web browser without a
-server. Start there, then use the TSV or JSON files when exact values or an
-auditable machine-readable result are required.
+Double-click `report.html`. It is a self-contained summary that can be opened in an ordinary web browser without a
+server. Start there, then use the TSV or JSON files when exact values or an auditable machine-readable result are required.
 
 ## 🔄 How classification works
 
@@ -520,8 +500,7 @@ treetip validate-reference-package \
 
 ### Internal validation of this exact package
 
-These are **internal leave-one-out controls**, not independent or clinical
-validation. Full methods, exclusions, and historical context are in the
+Full methods, exclusions, and historical context are in the
 [package record](reference-packages/mlst-cdifficile-20260806/README.md) and
 [maintainer handoff](docs/HANDOFF.md).
 
@@ -603,5 +582,4 @@ Repository visibility, release tags, and reference-data clearance are governed
 by the [public-release document](docs/public-release.md), not by the presence of
 installation instructions here.
 
-[^1]: [US Centers for Disease Control and Prevention, “About C. diff”](https://www.cdc.gov/c-diff/about/index.html).
-[^2]: [PubMLST, “Clostridioides difficile” typing and isolate database](https://pubmlst.org/organisms/clostridioides-difficile).
+[^1]: [PubMLST, “Clostridioides difficile” typing and isolate database](https://pubmlst.org/organisms/clostridioides-difficile).
