@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from treetip_placer.environment import (
     MAFFT_VERSION,
@@ -56,6 +57,7 @@ class EnvironmentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "expected pinned version"):
             verify_mafft("/tools/mafft", required_version=MAFFT_VERSION, runner=old_version_runner)
 
+    @patch("treetip_placer.environment.sys.platform", "linux")
     def test_setup_requires_a_supported_manager(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaisesRegex(ValueError, "micromamba, mamba, or conda"):
@@ -66,6 +68,15 @@ class EnvironmentTests(unittest.TestCase):
                     runner=successful_runner,
                 )
 
+    @patch("treetip_placer.environment.sys.platform", "win32")
+    def test_setup_rejects_native_windows(self) -> None:
+        with self.assertRaisesRegex(ValueError, "supported on macOS and Linux"):
+            setup_mafft_environment(
+                path_lookup=lambda _name: "/tools/micromamba",
+                runner=successful_runner,
+            )
+
+    @patch("treetip_placer.environment.sys.platform", "linux")
     def test_setup_creates_configured_environment(self) -> None:
         commands: list[list[str]] = []
 
@@ -91,6 +102,7 @@ class EnvironmentTests(unittest.TestCase):
             self.assertEqual(saved["mafft_version"], MAFFT_VERSION)
             self.assertEqual(saved["source"], "managed_environment")
 
+    @patch("treetip_placer.environment.sys.platform", "linux")
     def test_existing_environment_is_verified_without_recreation(self) -> None:
         commands: list[list[str]] = []
 
@@ -113,6 +125,7 @@ class EnvironmentTests(unittest.TestCase):
             self.assertEqual(len(commands), 1)
             self.assertEqual(commands[0][-1], "--version")
 
+    @patch("treetip_placer.environment.sys.platform", "linux")
     def test_refresh_removes_only_the_managed_prefix_before_recreating(self) -> None:
         commands: list[list[str]] = []
 
