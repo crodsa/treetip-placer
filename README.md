@@ -135,10 +135,16 @@ git clone https://github.com/crodsa/treetip-placer.git
 cd treetip-placer
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install .
+python -m pip install -e .
 treetip setup
 treetip --version
 ```
+
+The editable install (`-e`) is intentional. TreeTip Placer 0.7.0 resolves its
+environment specification and bundled reference package from this cloned
+repository, so keep the checkout in place after installation. The project can
+build a wheel for packaging checks, but that wheel is not a supported
+standalone distribution of those repository resources.
 
 Requirements:
 
