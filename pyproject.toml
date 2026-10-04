@@ -24,7 +24,7 @@ Source = "https://github.com/crodsa/treetip-placer"
 Issues = "https://github.com/crodsa/treetip-placer/issues"
 
 [project.optional-dependencies]
-dev = ["ruff==0.15.22"]
+dev = ["ruff==0.16.10"]
 
 [project.scripts]
 treetip = "treetip_placer.cli:main"
