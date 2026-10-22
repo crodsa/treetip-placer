@@ -1,0 +1,12 @@
+Reference Package Academic and Research Use Notice
+
+The paired *Clostridioides difficile* seven-locus MLST reference package
+(`mlst-cdifficile-20260806`) contains curated 3,501-bp concatenated reference
+alignments, maximum-likelihood Newick reference trees, and clade metadata
+derived from public PubMLST and EnteroBase sequence records by César Rodríguez
+(Universidad de Costa Rica).
+
+Permission is granted to use, copy, and redistribute this reference package for
+academic, research, and public-health surveillance purposes, provided that
+attribution to the original public sequence databases (PubMLST and EnteroBase)
+and to the accompanying TreeTip Placer publication is maintained.

@@ -1,0 +1,23 @@
+{
+  "classical": {
+    "alignment": "classical/aligned.fasta",
+    "alignment_sha256": "4c9f75c57e99600b2aa796a8c14f9c741dfc57b3d918d0b758166a03fd791644",
+    "expected_clade_count": 5,
+    "tip_clades": "classical/tip_clades.tsv",
+    "tip_clades_sha256": "ea6ce4d32709f1ec24a06e9ee48b94c8816f447da9fc417a0e4c2b53ecc83f95",
+    "tree": "classical/tree.nwk",
+    "tree_sha256": "1dac63caef97e7e106fe665649df93417cb797a02fb721b80e566bbe92255fbd"
+  },
+  "cryptic": {
+    "alignment": "cryptic/aligned.fasta",
+    "alignment_sha256": "a1e1d089af7c6f35b892067a40a06008a8d51df60a7b47f7621b556c6cfcc27d",
+    "expected_clade_count": 7,
+    "tip_clades": "cryptic/tip_clades.tsv",
+    "tip_clades_sha256": "ba29f73c453073fe185ffc86153eee553797eecdde0399f5790ac805387f599c",
+    "tree": "cryptic/tree.nwk",
+    "tree_sha256": "a96e6893eb1f77e4e22529adcca6cf1bbf413b2ecba22734da2c7ecc4a5afb43"
+  },
+  "minimum_distance_separation": 0.01,
+  "package_name": "mlst_cdifficile_20260806",
+  "schema_version": 1
+}
