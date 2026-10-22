@@ -13,7 +13,10 @@ once public releases begin.
   linked manual and handoff statements that contradicted the verified contract.
 - Reworked automatic-placement HTML reports into two complementary per-query
   views: a reference-name-free global clade context and a topology-derived local
-  placement branch with named neighbours.
+  placement branch with named neighbours, isolating each query from other placed
+  queries in multi-query batch runs.
+- Enforced `final_status != "FAIL"` during panel selection and prioritized
+  references meeting `min_comparable_sites` during nearest-reference QC.
 - Relicensed software and documentation under Apache-2.0 while explicitly
   retaining the current private reference package outside that licence.
 

@@ -156,6 +156,25 @@ class PlacementTests(unittest.TestCase):
 
         self.assertAlmostEqual(distance, 0.7)
 
+    def test_sequence_qc_prefers_reference_meeting_min_comparable_sites(self) -> None:
+        from treetip_placer.sequence import evaluate_sequence_qc
+
+        query = AlignedSequence("q", ("A", "C", "G", "T"))
+        sparse_ref = AlignedSequence("sparse_zero_dist", ("A", None, None, None))
+        complete_ref = AlignedSequence("complete_small_dist", ("A", "C", "G", "A"))
+        qc = evaluate_sequence_qc(
+            query,
+            (sparse_ref, complete_ref),
+            min_coverage=0.5,
+            warn_coverage=0.9,
+            min_comparable_sites=3,
+            outlier_distance=0.5,
+        )
+
+        self.assertEqual(qc.status, "PASS")
+        self.assertEqual(qc.nearest_reference, "complete_small_dist")
+        self.assertEqual(qc.comparable_sites, 4)
+
 
 if __name__ == "__main__":
     unittest.main()

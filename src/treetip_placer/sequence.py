@@ -60,11 +60,14 @@ def evaluate_sequence_qc(
     nearest_reference: str | None = None
     nearest_distance: float | None = None
     comparable_sites = 0
+    best_key: tuple[int, float, int] | None = None
     for reference in references:
         distance, compared = character_distance(query, reference)
         if distance is None:
             continue
-        if nearest_distance is None or distance < nearest_distance:
+        candidate_key = (0 if compared >= min_comparable_sites else 1, distance, -compared)
+        if best_key is None or candidate_key < best_key:
+            best_key = candidate_key
             nearest_distance = distance
             nearest_reference = reference.sample_id
             comparable_sites = compared

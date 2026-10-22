@@ -7,6 +7,7 @@ import csv
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -693,7 +694,7 @@ def run_auto_place(arguments: argparse.Namespace) -> int:
         "classical_reference_alignment_path": str(package.classical.alignment_path),
         "cryptic_tree_path": str(package.cryptic.tree_path),
         "cryptic_reference_alignment_path": str(package.cryptic.alignment_path),
-        "mafft_executable": str(Path(arguments.mafft).resolve()),
+        "mafft_executable": str(Path(shutil.which(arguments.mafft) or arguments.mafft).resolve()),
         "mafft_version": getattr(arguments, "mafft_version", None),
         "mafft_source": getattr(arguments, "mafft_source", "explicit"),
         "minimum_distance_separation": minimum_distance_separation,

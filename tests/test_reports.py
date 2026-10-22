@@ -240,6 +240,33 @@ class ReportTests(unittest.TestCase):
             if root.exists():
                 shutil.rmtree(root)
 
+    def test_multi_query_batch_isolates_other_queries_from_reference_counts_and_zoom(self) -> None:
+        tree = Tree.from_newick("((ref_1:0.1,ref_2:0.1):0.1,((ref_3:0.1,query_A:0.01):0.05,query_B:0.02):0.1);")
+        tip_clades = {"ref_1": "C-I", "ref_2": "C-I", "ref_3": "C-II"}
+
+        context_a = render_clade_context(
+            "cryptic",
+            tree,
+            "query_A",
+            "C-II",
+            tip_clades,
+            query_ids={"query_A", "query_B"},
+        )
+        zoom_a = render_tree_zoom(
+            "cryptic",
+            tree,
+            "query_A",
+            query_ids={"query_A", "query_B"},
+        )
+
+        self.assertIn("C-I (2 tips)", context_a)
+        self.assertIn("C-II (1 tips)", context_a)
+        self.assertNotIn("unlabelled", context_a.lower())
+        self.assertNotIn("query_B", context_a)
+        self.assertIn(">query_A</text>", zoom_a)
+        self.assertIn(">ref_3</text>", zoom_a)
+        self.assertNotIn("query_B", zoom_a)
+
 
 if __name__ == "__main__":
     unittest.main()

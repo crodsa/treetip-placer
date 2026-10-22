@@ -65,6 +65,18 @@ class PanelSelectionTests(unittest.TestCase):
         self.assertEqual(decision.decision_status, "FAIL")
         self.assertIn("NO_PANEL_PASSED_QC", decision.findings)
 
+    def test_rejects_panel_whose_placement_failed_post_qc(self) -> None:
+        decision = choose_reference_panel(
+            [result("query", 0.01, qc_status="PASS", final_status="FAIL")],
+            [result("query", 0.08, qc_status="PASS", final_status="PASS")],
+            0.02,
+        )[0]
+
+        self.assertEqual(decision.assignment, "CRYPTIC")
+        self.assertEqual(decision.selected_panel, "cryptic")
+        self.assertEqual(decision.decision_status, "WARN")
+        self.assertIn("ONLY_ONE_PANEL_PASSED_QC", decision.findings)
+
     def test_unique_control_selection_excludes_duplicate_sequences(self) -> None:
         controls = select_unique_sequence_controls(
             (

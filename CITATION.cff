@@ -3,8 +3,12 @@ message: "If you use TreeTip Placer, please cite the software and the reference 
 type: software
 title: TreeTip Placer
 authors:
-  - name: TreeTip Placer contributors
+  - family-names: "Rodríguez"
+    given-names: "César"
+    orcid: "https://orcid.org/0000-0001-5599-0652"
+    affiliation: "Facultad de Microbiología and Centro de Investigación en Enfermedades Tropicales (CIET), Universidad de Costa Rica"
 version: 0.7.0
+date-released: 2026-08-15
 license: Apache-2.0
 repository-code: https://github.com/crodsa/treetip-placer
 url: https://github.com/crodsa/treetip-placer

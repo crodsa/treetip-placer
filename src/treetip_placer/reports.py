@@ -143,7 +143,8 @@ def render_selected_tree_figures(
             figures.append(f"<p><strong>{escape(panel.title())}</strong>: selected tree is unavailable.</p>")
             continue
         tree = Tree.from_path(tree_path)
-        for sample_id in sorted(highlighted[panel]):
+        panel_queries = set(highlighted[panel])
+        for sample_id in sorted(panel_queries):
             assignment = clade_by_sample.get(sample_id)
             figures.append(
                 render_clade_context(
@@ -152,9 +153,18 @@ def render_selected_tree_figures(
                     sample_id,
                     assignment.phylogenetic_clade if assignment else None,
                     tip_clades.get(panel, {}),
+                    query_ids=panel_queries,
                 )
             )
-            figures.append(render_tree_zoom(panel, tree, sample_id, assignment))
+            figures.append(
+                render_tree_zoom(
+                    panel,
+                    tree,
+                    sample_id,
+                    assignment,
+                    query_ids=panel_queries,
+                )
+            )
     return "\n".join(figures)
 
 
@@ -233,6 +243,18 @@ def render_tree_figure(
 </figure>"""
 
 
+def _isolate_query_tree(tree: Tree, sample_id: str, query_ids: set[str] | None) -> tuple[Tree, set[str]]:
+    """Return a copy of tree with other batch query tips pruned when possible."""
+
+    other_queries = (set(query_ids) if query_ids else set()) - {sample_id}
+    single_tree = tree
+    for other_id in sorted(other_queries):
+        if other_id in single_tree.tip_index and len(single_tree.tips) > 3:
+            single_tree, _ = single_tree.without_tip(other_id)
+    remaining_other_queries = {other_id for other_id in other_queries if other_id in single_tree.tip_index}
+    return single_tree, remaining_other_queries
+
+
 def render_tree_zoom(
     panel: str,
     tree: Tree,
@@ -240,6 +262,7 @@ def render_tree_zoom(
     clade_assignment: CladeAssignment | None = None,
     *,
     max_reference_tips: int = 12,
+    query_ids: set[str] | None = None,
 ) -> str:
     """Render a topology-derived local subtree around one newly placed tip.
 
@@ -250,6 +273,7 @@ def render_tree_zoom(
     local reconstruction.
     """
 
+    tree, other_queries = _isolate_query_tree(tree, sample_id, query_ids)
     focus_tip = next((tip for tip in tree.tips if tip.name == sample_id), None)
     if focus_tip is None:
         return (
@@ -273,7 +297,9 @@ def render_tree_zoom(
 
     def descendant_reference_names(node: Node) -> tuple[str, ...]:
         if node.is_leaf:
-            return () if node.name == sample_id else (node.name or "",)
+            if node.name == sample_id or (node.name or "") in other_queries:
+                return ()
+            return (node.name or "",)
         return tuple(name for child in node.children for name in descendant_reference_names(child))
 
     def contains_query(node: Node) -> bool:
@@ -313,7 +339,7 @@ def render_tree_zoom(
         node_id, hops = queue[cursor]
         cursor += 1
         node = tree.nodes[node_id]
-        if node.is_leaf and node.name != sample_id:
+        if node.is_leaf and node.name != sample_id and (node.name or "") not in other_queries:
             visible_reference_names.add(node.name or "")
             continue
         for neighbour_id, _ in sorted(tree.adjacency[node_id]):
@@ -329,6 +355,8 @@ def render_tree_zoom(
         if node.is_leaf:
             if node.name == sample_id:
                 return ContextNode(source=node, label=node.name, is_query=True)
+            if (node.name or "") in other_queries:
+                return ContextNode(source=node, label="… (0 tips)", collapsed=True)
             return ContextNode(source=node, label=node.name)
         return ContextNode(source=node, children=[build(child) for child in node.children])
 
@@ -416,6 +444,8 @@ def render_clade_context(
     sample_id: str,
     target_clade: str | None,
     tip_clades: Mapping[str, str],
+    *,
+    query_ids: set[str] | None = None,
 ) -> str:
     """Render the full known reference universe without reference-tip names.
 
@@ -424,6 +454,7 @@ def render_clade_context(
     reference identifiers out of the zoom-out figure.
     """
 
+    tree, other_queries = _isolate_query_tree(tree, sample_id, query_ids)
     if sample_id not in tree.tip_index:
         return (
             f"<p><strong>{escape(sample_id)}</strong>: global clade context is unavailable "
@@ -438,7 +469,7 @@ def render_clade_context(
     def build(node: Node) -> ContextNode:
         names = descendant_tip_names(node)
         contains_query = sample_id in names
-        reference_names = tuple(name for name in names if name != sample_id)
+        reference_names = tuple(name for name in names if name != sample_id and name not in other_queries)
         clades = {tip_clades[name] for name in reference_names if name in tip_clades}
         if not contains_query:
             if not clades:
@@ -454,6 +485,8 @@ def render_clade_context(
             name = node.name or ""
             if name == sample_id:
                 return ContextNode(source=node, label=name, is_query=True)
+            if name in other_queries:
+                return ContextNode(source=node, label="Unlabelled (0 tips)", collapsed=True)
             return ContextNode(source=node, label="Unlabelled (1 tips)", collapsed=True)
         return ContextNode(source=node, children=[build(child) for child in node.children])
 

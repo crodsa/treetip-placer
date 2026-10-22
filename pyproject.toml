@@ -9,7 +9,7 @@ description = "Quality-controlled placement of fixed-column FASTA alignments on 
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
-authors = [{name = "TreeTip Placer contributors"}]
+authors = [{name = "César Rodríguez"}]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
@@ -37,6 +37,10 @@ where = ["src"]
 
 [tool.unittest]
 start-directory = "tests"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 119
