@@ -12,7 +12,7 @@ from treetip_placer.cli import build_panel_gate_summary, write_calibration_recor
 
 
 SUMMARY = {
-    "version": "1.0",
+    "version": "1.0.0",
     "method": "fixed_tree_leave_one_unique_sequence_out_placement_accuracy",
     "warning": "Internal topology diagnostics only: this is not phylogenetic support.",
     "tree_path": "/private/tree.nwk",
@@ -72,7 +72,7 @@ class CalibrationReportTests(unittest.TestCase):
 
         self.assertIn("not phylogenetic support", document)
         self.assertIn("abc123", document)
-        self.assertIn("1.0", document)
+        self.assertIn("1.0.0", document)
 
     def test_threshold_sweep_is_omitted_when_empty(self) -> None:
         document = self.render()

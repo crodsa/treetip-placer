@@ -28,15 +28,20 @@ class CliTests(unittest.TestCase):
         every artifact a released version produces.
         """
 
+        import json
+        import re
         import tomllib
 
         from treetip_placer import __version__
 
-        pyproject = tomllib.loads(
-            (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
-        )
+        repo_root = Path(__file__).resolve().parent.parent
+        pyproject = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))
+        citation = (repo_root / "CITATION.cff").read_text(encoding="utf-8")
+        zenodo = json.loads((repo_root / ".zenodo.json").read_text(encoding="utf-8"))
 
         self.assertEqual(__version__, pyproject["project"]["version"])
+        self.assertRegex(citation, re.compile(rf"^version: {re.escape(__version__)}$", re.MULTILINE))
+        self.assertEqual(zenodo["version"], __version__)
 
     def test_alignment_placement_writes_outputs(self) -> None:
         fixtures = Path("tests/fixtures")

@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -99,9 +100,15 @@ def managed_environment_prefix(data_directory: Path | None = None) -> Path:
 
 
 def environment_specification_path() -> Path:
-    """Return the checked-in Conda specification used by setup."""
+    """Return the checked-in or wheel-installed Conda specification used by setup."""
 
-    return _REPO_ROOT / "environment.yml"
+    repo_spec = _REPO_ROOT / "environment.yml"
+    if repo_spec.is_file():
+        return repo_spec
+    installed_spec = Path(sysconfig.get_path("data")) / "share" / "treetip-placer" / "environment.yml"
+    if installed_spec.is_file():
+        return installed_spec
+    return repo_spec
 
 
 def find_environment_manager(

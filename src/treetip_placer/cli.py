@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import sys
+import sysconfig
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
@@ -63,10 +64,8 @@ _WORKER_TREE: Tree | None = None
 _WORKER_REFERENCES: tuple[AlignedSequence, ...] = ()
 _WORKER_CONFIG: PlacementConfig | None = None
 
-# src/treetip_placer/cli.py -> src/treetip_placer -> src -> repository root.
-# Valid for the only supported distribution model (an editable install from a
-# git checkout); there is no packaged wheel that ships reference-packages/
-# separately.
+# src/treetip_placer/cli.py -> src/treetip_placer -> src -> repository root,
+# with fallback to sysconfig data-files when installed from a release wheel.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Maps a `classify --organism` key to its directory name under
@@ -80,13 +79,25 @@ ORGANISM_REFERENCE_PACKAGES: dict[str, str] = {
 def resolve_organism_reference_package(organism: str) -> Path:
     """Resolve a `classify --organism` key to its bundled manifest path."""
 
-    manifest_path = _REPO_ROOT / "reference-packages" / ORGANISM_REFERENCE_PACKAGES[organism] / "paired_reference.json"
-    if not manifest_path.is_file():
-        raise ValueError(
-            f"Bundled reference package for organism '{organism}' is missing: "
-            f"expected {manifest_path}. Check that the repository checkout is complete."
-        )
-    return manifest_path
+    package_directory = ORGANISM_REFERENCE_PACKAGES[organism]
+    manifest_path = _REPO_ROOT / "reference-packages" / package_directory / "paired_reference.json"
+    if manifest_path.is_file():
+        return manifest_path
+    installed_path = (
+        Path(sysconfig.get_path("data"))
+        / "share"
+        / "treetip-placer"
+        / "reference-packages"
+        / package_directory
+        / "paired_reference.json"
+    )
+    if installed_path.is_file():
+        return installed_path
+    raise ValueError(
+        f"Bundled reference package for organism '{organism}' is missing: "
+        f"expected {manifest_path} or {installed_path}. "
+        "Check that the installation or repository checkout is complete."
+    )
 
 
 def default_classify_output_directory(query_fasta: str, *, now: datetime | None = None) -> str:

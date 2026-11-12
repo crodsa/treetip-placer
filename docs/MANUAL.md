@@ -45,7 +45,7 @@ Confirm the command-line installation:
 treetip --version
 ```
 
-This should print `1.0`. If it doesn't, something went wrong with the steps above — ask for help before continuing.
+This should print `1.0.0`. If it doesn't, something went wrong with the steps above — ask for help before continuing.
 
 ## Running it on your samples
 

@@ -2,9 +2,9 @@
 
 All notable changes are documented here.
 
-## 1.0 — 2026-10-22
+## 1.0.0 — 2026-11-12
 
-Initial public release of TreeTip Placer (`v1.0`).
+Initial stable semantic-versioned release of TreeTip Placer (`v1.0.0`), including wheel/sdist data-file packaging for `mlst-cdifficile-20260806` and `environment.yml`, Zenodo metadata (`.zenodo.json`), and ENA BioProject `PRJEB103842` cross-referencing.
 
 - Dual-panel coordinate projection (`MAFFT --add --keeplength`), calibrated `0.01` nearest-reference p-distance separation gate, and constrained non-negative weighted least-squares (`WLS`) fixed-tree placement for concatenated seven-locus *Clostridioides difficile* MLST sequences (`3,501 bp`).
 - Routine one-command classification workflow (`treetip classify --organism cdifficile-mlst`) and explicit paired-reference workflow (`treetip place-auto`) with managed MAFFT environment setup (`treetip setup`).

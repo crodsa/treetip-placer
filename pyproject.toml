@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "treetip-placer"
-version = "1.0"
+version = "1.0.0"
 description = "Quality-controlled placement of fixed-column FASTA alignments on a reference tree."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -34,6 +34,26 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.data-files]
+"share/treetip-placer" = [
+    "environment.yml",
+]
+"share/treetip-placer/reference-packages/mlst-cdifficile-20260806" = [
+    "reference-packages/mlst-cdifficile-20260806/LICENSE",
+    "reference-packages/mlst-cdifficile-20260806/README.md",
+    "reference-packages/mlst-cdifficile-20260806/paired_reference.json",
+]
+"share/treetip-placer/reference-packages/mlst-cdifficile-20260806/classical" = [
+    "reference-packages/mlst-cdifficile-20260806/classical/aligned.fasta",
+    "reference-packages/mlst-cdifficile-20260806/classical/tip_clades.tsv",
+    "reference-packages/mlst-cdifficile-20260806/classical/tree.nwk",
+]
+"share/treetip-placer/reference-packages/mlst-cdifficile-20260806/cryptic" = [
+    "reference-packages/mlst-cdifficile-20260806/cryptic/aligned.fasta",
+    "reference-packages/mlst-cdifficile-20260806/cryptic/tip_clades.tsv",
+    "reference-packages/mlst-cdifficile-20260806/cryptic/tree.nwk",
+]
 
 [tool.unittest]
 start-directory = "tests"

@@ -1,0 +1,36 @@
+{
+  "title": "TreeTip Placer: Conservative fixed-tree phylogenetic placement and clade screening for Clostridioides MLST sequences",
+  "version": "1.0.0",
+  "upload_type": "software",
+  "license": "Apache-2.0",
+  "description": "TreeTip Placer (v1.0.0) performs quality-controlled coordinate projection, nearest-reference panel arbitration, constrained weighted least-squares fixed-tree placement, and conservative phylogenetic clade assignment for concatenated seven-locus Clostridioides difficile and cryptic Clostridioides MLST alignments.",
+  "creators": [
+    {
+      "name": "Rodríguez, César",
+      "affiliation": "Facultad de Microbiología and Centro de Investigación en Enfermedades Tropicales (CIET), Universidad de Costa Rica, San José, Costa Rica",
+      "orcid": "0000-0001-5599-0652"
+    }
+  ],
+  "keywords": [
+    "Clostridioides difficile",
+    "cryptic Clostridioides",
+    "phylogenetic placement",
+    "MLST",
+    "weighted least squares",
+    "genomic surveillance",
+    "microbial genomics"
+  ],
+  "language": "eng",
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/crodsa/ML-classifier",
+      "relation": "references",
+      "resource_type": "software"
+    },
+    {
+      "identifier": "https://www.ebi.ac.uk/ena/browser/view/PRJEB103842",
+      "relation": "references",
+      "resource_type": "dataset"
+    }
+  ]
+}

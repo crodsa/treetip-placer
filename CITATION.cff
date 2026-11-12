@@ -7,8 +7,8 @@ authors:
     given-names: "César"
     orcid: "https://orcid.org/0000-0001-5599-0652"
     affiliation: "Facultad de Microbiología and Centro de Investigación en Enfermedades Tropicales (CIET), Universidad de Costa Rica"
-version: 1.0
-date-released: 2026-10-22
+version: 1.0.0
+date-released: 2026-11-12
 license: Apache-2.0
 repository-code: https://github.com/crodsa/treetip-placer
 url: https://github.com/crodsa/treetip-placer

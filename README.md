@@ -66,7 +66,7 @@ groups. **Cryptic** means its seven `C-I` to `C-VII` phylogroups.
 
 The underlying engine can also work with another curated fixed-column
 nucleotide reference, and `classify --organism cdifficile-mlst` is the
-bundled routine configuration in version 1.0.
+bundled routine configuration in version 1.0.0.
 
 ## ⚡ Quick start
 
@@ -122,9 +122,11 @@ treetip setup
 treetip --version
 ```
 
-The editable install (`-e`) is intentional. TreeTip Placer 1.0 resolves its
-environment specification and bundled reference package from this cloned
-repository, so keep the checkout in place after installation.
+Both editable (`-e .`) and release-wheel (`pip install .` or
+`pip install treetip_placer-1.0.0-py3-none-any.whl`) installations are supported:
+TreeTip Placer 1.0.0 resolves its environment specification and bundled reference
+package from a repository checkout first and falls back automatically to the
+installed wheel `share/treetip-placer` data files.
 
 Requirements:
 
@@ -140,7 +142,7 @@ On Windows, use a Linux environment such as WSL or supply a separately verified
 MAFFT executable with `classify --mafft` or `place-auto --mafft`.
 
 Use `treetip setup --refresh` only when you intend to recreate TreeTip's managed
-MAFFT environment. A successful version check prints `1.0`.
+MAFFT environment. A successful version check prints `1.0.0`.
 
 ### 3. Classify the isolates
 
@@ -433,7 +435,7 @@ Missing metadata, no usable placement, or an unresolved placement produces an
 unresolved clade. This is a discrete inheritance rule, not topology inference
 or branch support.
 
-### Version 1.0 defaults
+### Version 1.0.0 defaults
 
 | Control | Default | Effect |
 | --- | --- | --- |
@@ -562,7 +564,7 @@ thresholds.
 | [Bundled reference package](reference-packages/mlst-cdifficile-20260806/README.md) | Build provenance, package-specific calibration, and limitations |
 | [Contributing guide](CONTRIBUTING.md) | Development workflow and contribution expectations |
 | [Security policy](SECURITY.md) | Supported version and vulnerability reporting |
-| [Changelog](CHANGELOG.md) | Release notes for v1.0 |
+| [Changelog](CHANGELOG.md) | Release notes for v1.0.0 |
 | [Citation metadata](CITATION.cff) | How to cite the software |
 | [Apache-2.0 licence](LICENSE) | Software and documentation licence |
 
