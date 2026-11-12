@@ -15,7 +15,7 @@ It does this by comparing your sequence to a fixed reference collection of alrea
 ## Before you start: what you need
 
 1. **The tool installed** (see below).
-2. **A Conda-compatible environment manager**: `micromamba`, `mamba`, or `conda`. The one-time `treetip setup` command installs and verifies the MAFFT version TreeTip Placer uses internally. You do not need to install MAFFT separately.
+2. **MAFFT (`7.x`)**: If `mafft` is already installed on your `PATH`, `treetip classify` finds and verifies it automatically. Otherwise, install `micromamba`, `mamba`, or `conda` and run `treetip setup` once to create a dedicated `MAFFT 7.526` environment.
 3. **Your own sequences as a FASTA file.** Each sequence should be the concatenation of the same 7 MLST loci (adk, atpA, dxr, glyA, recA, sodA, tpi) the bundled reference was built from, one entry per isolate, with a short unique name after the `>` on each header line. TreeTip validates FASTA structure and mapped-sequence QC, but it cannot infer whether an upstream workflow extracted the correct loci or joined them in the correct order. Confirm that preparation before running.
 
 You do **not** need to separately locate a reference package — one ships with this repository and `classify` finds it on its own; see below.
@@ -28,6 +28,8 @@ You need Python 3.11 or newer. From a terminal, inside the project folder:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
+
+# Only needed if `mafft` is not already installed on your PATH:
 treetip setup
 ```
 
@@ -54,6 +56,8 @@ The command you will use almost every time is `classify`. Give it your FASTA fil
 ```bash
 treetip classify my_isolates.fasta --organism cdifficile-mlst
 ```
+
+*(Tip: to test your installation first, run `treetip classify examples/demo_isolates.fasta --organism cdifficile-mlst`.)*
 
 That's the whole command for routine use. It prints the three things it resolved automatically before it starts:
 
@@ -99,9 +103,9 @@ The underlying data behind that report also lives in the same folder as plain ta
 - `clade_assignment.tsv` — the clade call, per isolate.
 
 The report is a human-readable index. The TSV and JSON sidecars retain the
-authoritative decisions and QC. See the
-[complete output map](../README.md#-complete-output-map) for mappings,
-panel-specific placements, alternatives, trees, manifests, and logs.
+authoritative decisions and QC. See
+[Output Files & How to Interpret Results](../README.md#output-files--how-to-interpret-results)
+for mappings, panel-specific placements, alternatives, trees, manifests, and logs.
 
 ### What the labels mean
 

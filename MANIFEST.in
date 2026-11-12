@@ -9,6 +9,7 @@ include CODE_OF_CONDUCT.md
 include CONTRIBUTING.md
 include environment.yml
 recursive-include docs *.md *.png *.svg
+recursive-include examples *.fasta
 recursive-include reference-packages *
 recursive-include tests *.py *.fasta *.nwk
 global-exclude .DS_Store
