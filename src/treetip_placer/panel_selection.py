@@ -59,9 +59,7 @@ def choose_reference_panel(
         eligible = [
             (panel, result)
             for panel, result in candidates
-            if result.qc.status != "FAIL"
-            and result.final_status != "FAIL"
-            and result.qc.nearest_distance is not None
+            if result.qc.status != "FAIL" and result.final_status != "FAIL" and result.qc.nearest_distance is not None
         ]
         common = dict(
             sample_id=sample_id,
